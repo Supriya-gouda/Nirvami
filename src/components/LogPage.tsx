@@ -1,0 +1,619 @@
+import { useState } from 'react';
+import { Save, Plus, Trash2, Calendar, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Navigation } from './Navigation';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Textarea } from './ui/textarea';
+import { Slider } from './ui/slider';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
+import { toast } from 'sonner@2.0.3';
+import type { PageType, User } from '../App';
+
+interface LogPageProps {
+  user: User | null;
+  onNavigate: (page: PageType) => void;
+}
+
+interface MealEntry {
+  id: string;
+  food: string;
+  mealType: 'breakfast' | 'lunch' | 'snacks' | 'dinner';
+}
+
+interface DailyLog {
+  meals: MealEntry[];
+  mood: string | null;
+  moodLabel: string | null;
+  energyLevel: number;
+  sleepHours: string;
+  notes: string;
+  timestamp: number;
+}
+
+export function LogPage({ user, onNavigate }: LogPageProps) {
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [viewedMonth, setViewedMonth] = useState(new Date().getMonth());
+  const [viewedYear, setViewedYear] = useState(new Date().getFullYear());
+  const [mealEntries, setMealEntries] = useState<MealEntry[]>([
+    { id: '1', food: '', mealType: 'breakfast' }
+  ]);
+  const [selectedMood, setSelectedMood] = useState<string | null>(null);
+  const [energyLevel, setEnergyLevel] = useState([60]);
+  const [sleepHours, setSleepHours] = useState('7');
+  const [additionalNotes, setAdditionalNotes] = useState('');
+
+  const moods = [
+    { emoji: '😊', label: 'Happy' },
+    { emoji: '😌', label: 'Calm' },
+    { emoji: '😢', label: 'Sad' },
+    { emoji: '😰', label: 'Anxious' },
+    { emoji: '😴', label: 'Tired' },
+    { emoji: '😤', label: 'Frustrated' },
+    { emoji: '🤗', label: 'Grateful' },
+    { emoji: '😐', label: 'Neutral' },
+    { emoji: '😡', label: 'Angry' },
+    { emoji: '😔', label: 'Low Energy' },
+    { emoji: '⚡', label: 'Energized' },
+    { emoji: '😕', label: 'Confused' },
+  ];
+
+  const addMealEntry = () => {
+    setMealEntries([
+      ...mealEntries,
+      { id: Date.now().toString(), food: '', mealType: 'breakfast' }
+    ]);
+  };
+
+  const removeMealEntry = (id: string) => {
+    if (mealEntries.length > 1) {
+      setMealEntries(mealEntries.filter(entry => entry.id !== id));
+    }
+  };
+
+  const updateMealEntry = (id: string, field: 'food' | 'mealType', value: string) => {
+    setMealEntries(mealEntries.map(entry => 
+      entry.id === id ? { ...entry, [field]: value } : entry
+    ));
+  };
+
+  const handleSave = () => {
+    // Get today's date in YYYY-MM-DD format
+    const today = new Date();
+    const dateStr = today.toISOString().split('T')[0];
+    
+    // Create log entry
+    const logEntry: DailyLog = {
+      meals: mealEntries.filter(entry => entry.food.trim() !== ''),
+      mood: selectedMood,
+      moodLabel: selectedMood ? moods.find(m => m.emoji === selectedMood)?.label || null : null,
+      energyLevel: energyLevel[0],
+      sleepHours: sleepHours,
+      notes: additionalNotes,
+      timestamp: Date.now()
+    };
+    
+    // Get existing logs from localStorage
+    const existingLogsStr = localStorage.getItem('nirvami_daily_logs');
+    const existingLogs = existingLogsStr ? JSON.parse(existingLogsStr) : {};
+    
+    // Save log for today
+    existingLogs[dateStr] = logEntry;
+    localStorage.setItem('nirvami_daily_logs', JSON.stringify(existingLogs));
+    
+    toast.success('Daily log saved successfully!');
+    
+    // Reset form
+    setMealEntries([{ id: Date.now().toString(), food: '', mealType: 'breakfast' }]);
+    setSelectedMood(null);
+    setEnergyLevel([60]);
+    setSleepHours('7');
+    setAdditionalNotes('');
+  };
+
+  // Get log for a specific date
+  const getLogForDate = (dateStr: string): DailyLog | null => {
+    const logsStr = localStorage.getItem('nirvami_daily_logs');
+    if (!logsStr) return null;
+    const logs = JSON.parse(logsStr);
+    return logs[dateStr] || null;
+  };
+
+  // Check if a date has a log
+  const hasLogForDate = (dateStr: string): boolean => {
+    return getLogForDate(dateStr) !== null;
+  };
+
+  // Get current month calendar data
+  const getCurrentMonthData = () => {
+    // Use viewed month/year instead of current date
+    const year = viewedYear;
+    const month = viewedMonth;
+    
+    // Get first day of month (0 = Sunday)
+    const firstDay = new Date(year, month, 1).getDay();
+    
+    // Get number of days in month
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    
+    // Get month name
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+                       'July', 'August', 'September', 'October', 'November', 'December'];
+    const monthName = monthNames[month];
+    
+    return { firstDay, daysInMonth, monthName, year, month };
+  };
+
+  // Navigate to previous month
+  const goToPreviousMonth = () => {
+    if (viewedMonth === 0) {
+      setViewedMonth(11);
+      setViewedYear(viewedYear - 1);
+    } else {
+      setViewedMonth(viewedMonth - 1);
+    }
+  };
+
+  // Navigate to next month
+  const goToNextMonth = () => {
+    if (viewedMonth === 11) {
+      setViewedMonth(0);
+      setViewedYear(viewedYear + 1);
+    } else {
+      setViewedMonth(viewedMonth + 1);
+    }
+  };
+
+  const handleDateClick = (dateStr: string) => {
+    const log = getLogForDate(dateStr);
+    if (log) {
+      setSelectedDate(dateStr);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-purple-100 via-blue-50 to-cyan-100 relative overflow-hidden">
+      <Navigation currentPage="manual" onNavigate={onNavigate} user={user} />
+
+      <div className="max-w-5xl mx-auto p-6 md:p-8 relative z-10">
+        {/* Header */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl md:text-4xl text-gray-800 mb-2">Daily Wellness Log</h1>
+              <p className="text-gray-600 text-lg">Track your meals, mood, energy, and sleep</p>
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => setShowCalendar(true)}
+              className="bg-white/60 backdrop-blur-sm border-white/50 hover:bg-white/80"
+            >
+              <Calendar className="w-4 h-4 mr-2" />
+              View History
+            </Button>
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          {/* Meals Log Section */}
+          <div className="relative bg-white/40 backdrop-blur-xl rounded-3xl p-6 border border-white/50 shadow-xl">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl text-gray-800">Meals</h2>
+              <Button
+                onClick={addMealEntry}
+                size="sm"
+                className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+              >
+                <Plus className="w-4 h-4 mr-1" />
+                Add Meal
+              </Button>
+            </div>
+
+            <div className="space-y-4">
+              {mealEntries.map((entry, index) => (
+                <div key={entry.id} className="flex gap-3 items-start">
+                  <div className="flex-1 grid md:grid-cols-2 gap-3">
+                    <Input
+                      placeholder="What did you eat? (e.g., Oatmeal with berries)"
+                      value={entry.food}
+                      onChange={(e) => updateMealEntry(entry.id, 'food', e.target.value)}
+                      className="bg-white/60 backdrop-blur-sm border-white/50"
+                    />
+                    <Select
+                      value={entry.mealType}
+                      onValueChange={(value) => updateMealEntry(entry.id, 'mealType', value as MealEntry['mealType'])}
+                    >
+                      <SelectTrigger className="bg-white/60 backdrop-blur-sm border-white/50">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-white/95 backdrop-blur-xl border-white/50">
+                        <SelectItem value="breakfast">🌅 Breakfast</SelectItem>
+                        <SelectItem value="lunch">☀️ Lunch</SelectItem>
+                        <SelectItem value="snacks">🍎 Snacks</SelectItem>
+                        <SelectItem value="dinner">🌙 Dinner</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {mealEntries.length > 1 && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => removeMealEntry(entry.id)}
+                      className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Mood Selection */}
+          <div className="relative bg-white/40 backdrop-blur-xl rounded-3xl p-6 border border-white/50 shadow-xl">
+            <h2 className="text-xl text-gray-800 mb-6">How are you feeling?</h2>
+            
+            <div className="grid grid-cols-4 md:grid-cols-6 gap-3">
+              {moods.map((mood) => (
+                <button
+                  key={mood.emoji}
+                  onClick={() => setSelectedMood(mood.emoji)}
+                  className={`aspect-square rounded-2xl flex flex-col items-center justify-center gap-2 transition-all ${
+                    selectedMood === mood.emoji
+                      ? 'bg-gradient-to-br from-purple-100 to-pink-100 ring-4 ring-purple-400 scale-105'
+                      : 'bg-white/60 hover:bg-white/80'
+                  }`}
+                >
+                  <span className="text-3xl md:text-4xl">{mood.emoji}</span>
+                  <span className="text-xs text-gray-600">{mood.label}</span>
+                </button>
+              ))}
+            </div>
+
+            {selectedMood && (
+              <div className="mt-4 p-4 rounded-2xl bg-gradient-to-br from-purple-50/80 to-pink-50/80 backdrop-blur-sm">
+                <p className="text-sm text-purple-900">
+                  Selected mood: <span className="text-2xl ml-2">{selectedMood}</span> {moods.find(m => m.emoji === selectedMood)?.label}
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Mood & Energy Levels */}
+          <div className="relative bg-white/40 backdrop-blur-xl rounded-3xl p-6 border border-white/50 shadow-xl">
+            <h2 className="text-xl text-gray-800 mb-6">Mood & Energy Levels</h2>
+            
+            <div className="space-y-6">
+              <div>
+                <label className="text-sm text-gray-700 mb-3 block">
+                  Energy Level: {energyLevel[0]}%
+                </label>
+                <Slider
+                  value={energyLevel}
+                  onValueChange={setEnergyLevel}
+                  max={100}
+                  step={1}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-gray-500 mt-2">
+                  <span>😴 Exhausted</span>
+                  <span>⚡ Energized</span>
+                </div>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4 pt-4">
+                <div className="p-4 rounded-2xl bg-gradient-to-br from-blue-100/60 to-cyan-100/60 backdrop-blur-sm">
+                  <p className="text-sm text-gray-600 mb-1">Energy Status</p>
+                  <p className="text-lg text-blue-700">
+                    {energyLevel[0] > 70 ? '⚡ High Energy' : energyLevel[0] > 40 ? '😊 Balanced' : '😴 Low Energy'}
+                  </p>
+                </div>
+                <div className="p-4 rounded-2xl bg-gradient-to-br from-purple-100/60 to-pink-100/60 backdrop-blur-sm">
+                  <p className="text-sm text-gray-600 mb-1">Mood Status</p>
+                  <p className="text-lg text-purple-700">
+                    {selectedMood ? `${selectedMood} ${moods.find(m => m.emoji === selectedMood)?.label}` : '— Not selected'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Sleep Duration */}
+          <div className="relative bg-white/40 backdrop-blur-xl rounded-3xl p-6 border border-white/50 shadow-xl">
+            <h2 className="text-xl text-gray-800 mb-6">Sleep Duration</h2>
+            
+            <div className="max-w-md">
+              <label className="text-sm text-gray-700 mb-3 block">
+                Hours of Sleep Last Night
+              </label>
+              <Input
+                type="number"
+                value={sleepHours}
+                onChange={(e) => setSleepHours(e.target.value)}
+                min="0"
+                max="24"
+                step="0.5"
+                placeholder="7.5"
+                className="bg-white/60 backdrop-blur-sm border-white/50"
+              />
+              <p className="text-xs text-gray-500 mt-2">
+                Recommended: 7-9 hours per night
+              </p>
+
+              {sleepHours && (
+                <div className={`mt-4 p-4 rounded-2xl backdrop-blur-sm ${
+                  parseFloat(sleepHours) >= 7 && parseFloat(sleepHours) <= 9
+                    ? 'bg-gradient-to-br from-green-100/60 to-emerald-100/60'
+                    : 'bg-gradient-to-br from-orange-100/60 to-amber-100/60'
+                }`}>
+                  <p className="text-sm">
+                    {parseFloat(sleepHours) >= 7 && parseFloat(sleepHours) <= 9
+                      ? '✅ Great! You got optimal sleep.'
+                      : parseFloat(sleepHours) < 7
+                      ? '⚠️ Consider getting more sleep for better wellness.'
+                      : '⚠️ You might be oversleeping. Aim for 7-9 hours.'}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Additional Notes */}
+          <div className="relative bg-white/40 backdrop-blur-xl rounded-3xl p-6 border border-white/50 shadow-xl">
+            <h2 className="text-xl text-gray-800 mb-6">Additional Notes</h2>
+            
+            <Textarea
+              value={additionalNotes}
+              onChange={(e) => setAdditionalNotes(e.target.value)}
+              placeholder="Any additional thoughts, symptoms, or observations about your day..."
+              rows={5}
+              className="resize-none bg-white/60 backdrop-blur-sm border-white/50"
+            />
+            <p className="text-xs text-gray-500 mt-2">
+              Optional: Add any other details about your wellness journey today
+            </p>
+          </div>
+
+          {/* Save Button */}
+          <div className="flex justify-end">
+            <Button
+              onClick={handleSave}
+              size="lg"
+              className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white shadow-lg"
+            >
+              <Save className="w-5 h-5 mr-2" />
+              Save Daily Log
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Calendar Dialog */}
+      <Dialog open={showCalendar} onOpenChange={(open) => {
+        setShowCalendar(open);
+        if (!open) setSelectedDate(null);
+      }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-white/95 backdrop-blur-xl border-white/50">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-purple-600" />
+              {selectedDate 
+                ? 'Daily Log Details'
+                : `${getCurrentMonthData().monthName} ${getCurrentMonthData().year} - Wellness History`
+              }
+            </DialogTitle>
+            <DialogDescription>
+              {selectedDate 
+                ? 'View your wellness log for the selected day.'
+                : 'Click on a highlighted day to view your saved log.'
+              }
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedDate ? (
+            // Show log details for selected date
+            (() => {
+              const log = getLogForDate(selectedDate);
+              if (!log) return null;
+              
+              const date = new Date(selectedDate);
+              const formattedDate = date.toLocaleDateString('en-US', { 
+                weekday: 'long', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+              });
+              
+              return (
+                <div className="space-y-4">
+                  {/* Back button */}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSelectedDate(null)}
+                    className="mb-2"
+                  >
+                    ← Back to Calendar
+                  </Button>
+                  
+                  {/* Date header */}
+                  <div className="bg-gradient-to-r from-purple-100 to-pink-100 rounded-2xl p-4">
+                    <h3 className="text-lg text-gray-800">{formattedDate}</h3>
+                    <p className="text-sm text-gray-600">Logged at {new Date(log.timestamp).toLocaleTimeString()}</p>
+                  </div>
+                  
+                  {/* Meals */}
+                  {log.meals.length > 0 && (
+                    <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-5 border border-white/50">
+                      <h4 className="text-gray-800 mb-3">🍽️ Meals</h4>
+                      <div className="space-y-2">
+                        {log.meals.map((meal, index) => (
+                          <div key={index} className="flex items-center gap-3 p-3 bg-white/80 rounded-xl">
+                            <span className="text-lg">
+                              {meal.mealType === 'breakfast' ? '🌅' : 
+                               meal.mealType === 'lunch' ? '☀️' : 
+                               meal.mealType === 'snacks' ? '🍎' : '🌙'}
+                            </span>
+                            <div className="flex-1">
+                              <p className="text-sm text-gray-800">{meal.food}</p>
+                              <p className="text-xs text-gray-500 capitalize">{meal.mealType}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Mood & Energy */}
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-5 border border-white/50">
+                      <h4 className="text-gray-800 mb-3">😊 Mood</h4>
+                      {log.mood ? (
+                        <div className="flex items-center gap-3">
+                          <span className="text-4xl">{log.mood}</span>
+                          <span className="text-lg text-gray-700">{log.moodLabel}</span>
+                        </div>
+                      ) : (
+                        <p className="text-gray-500 text-sm">No mood recorded</p>
+                      )}
+                    </div>
+                    
+                    <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-5 border border-white/50">
+                      <h4 className="text-gray-800 mb-3">⚡ Energy Level</h4>
+                      <div className="space-y-2">
+                        <p className="text-2xl text-purple-600">{log.energyLevel}%</p>
+                        <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-gradient-to-r from-purple-400 to-pink-400 rounded-full"
+                            style={{ width: `${log.energyLevel}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Sleep */}
+                  <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-5 border border-white/50">
+                    <h4 className="text-gray-800 mb-3">😴 Sleep Duration</h4>
+                    <p className="text-lg text-gray-700">{log.sleepHours} hours</p>
+                    {log.sleepHours && (
+                      <p className="text-sm text-gray-500 mt-1">
+                        {parseFloat(log.sleepHours) >= 7 && parseFloat(log.sleepHours) <= 9
+                          ? '✅ Optimal sleep range'
+                          : parseFloat(log.sleepHours) < 7
+                          ? '⚠️ Below recommended range'
+                          : '⚠️ Above recommended range'}
+                      </p>
+                    )}
+                  </div>
+                  
+                  {/* Notes */}
+                  {log.notes && (
+                    <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-5 border border-white/50">
+                      <h4 className="text-gray-800 mb-3">📝 Notes</h4>
+                      <p className="text-gray-700 whitespace-pre-wrap">{log.notes}</p>
+                    </div>
+                  )}
+                </div>
+              );
+            })()
+          ) : (
+            // Show calendar
+            <div className="space-y-4">
+              <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 border border-white/50">
+                {/* Year */}
+                <div className="text-center mb-2">
+                  <p className="text-sm text-gray-600">{getCurrentMonthData().year}</p>
+                </div>
+                
+                {/* Month navigation */}
+                <div className="flex items-center justify-between mb-4">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={goToPreviousMonth}
+                    className="hover:bg-white/60"
+                  >
+                    <ChevronLeft className="w-5 h-5 text-gray-700" />
+                  </Button>
+                  
+                  <h3 className="text-lg text-gray-800">
+                    {getCurrentMonthData().monthName}
+                  </h3>
+                  
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={goToNextMonth}
+                    className="hover:bg-white/60"
+                  >
+                    <ChevronRight className="w-5 h-5 text-gray-700" />
+                  </Button>
+                </div>
+                
+                {/* Calendar grid */}
+                <div className="grid grid-cols-7 gap-2">
+                  {/* Day headers */}
+                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+                    <div key={day} className="text-center text-sm text-gray-600 p-2">
+                      {day}
+                    </div>
+                  ))}
+                  
+                  {/* Empty cells for days before month starts */}
+                  {Array.from({ length: getCurrentMonthData().firstDay }).map((_, i) => (
+                    <div key={`empty-${i}`} className="aspect-square" />
+                  ))}
+                  
+                  {/* Actual days of the month */}
+                  {Array.from({ length: getCurrentMonthData().daysInMonth }, (_, dayIndex) => {
+                    const day = dayIndex + 1;
+                    const { year, month } = getCurrentMonthData();
+                    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                    const hasLog = hasLogForDate(dateStr);
+                    const isToday = dateStr === new Date().toISOString().split('T')[0];
+                    
+                    return (
+                      <button
+                        key={day}
+                        onClick={() => handleDateClick(dateStr)}
+                        disabled={!hasLog}
+                        className={`aspect-square p-2 rounded-xl flex items-center justify-center text-sm transition-all ${
+                          hasLog
+                            ? 'bg-gradient-to-br from-purple-100 to-pink-100 text-purple-700 hover:scale-110 hover:shadow-lg cursor-pointer'
+                            : 'bg-gray-50 text-gray-400 cursor-not-allowed'
+                        } ${
+                          isToday ? 'ring-2 ring-purple-500 ring-offset-2' : ''
+                        }`}
+                        title={hasLog ? `View log for ${dateStr}` : 'No log for this day'}
+                      >
+                        {day}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              
+              {/* Legend */}
+              <div className="flex items-center justify-center gap-6 p-4 bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-purple-100 to-pink-100" />
+                  <span className="text-sm text-gray-700">Has Log</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-lg bg-gray-50" />
+                  <span className="text-sm text-gray-700">No Log</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-lg bg-gray-50 ring-2 ring-purple-500 ring-offset-1" />
+                  <span className="text-sm text-gray-700">Today</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
