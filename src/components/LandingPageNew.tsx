@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { motion, useScroll, useTransform } from "motion/react";
 import { 
   MessageCircle, 
@@ -16,37 +15,17 @@ import {
   Sparkles
 } from "lucide-react";
 import { Button } from "./ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "./ui/dialog";
-import { Input } from "./ui/input";
 import type { User } from "../App";
 import logo from "figma:asset/34629939463a62914e4d6cf8617751092b770df0.png";
 
 interface LandingPageProps {
-  onLogin: (user: User) => void;
+  onGetStarted: () => void;
 }
 
-export function LandingPage({ onLogin }: LandingPageProps) {
-  const [showLogin, setShowLogin] = useState(false);
-  const [userName, setUserName] = useState("");
+export function LandingPage({ onGetStarted }: LandingPageProps) {
   const { scrollYProgress } = useScroll();
   const opacity = useTransform(scrollYProgress, [0, 0.2], [1, 0]);
   const scale = useTransform(scrollYProgress, [0, 0.2], [1, 0.95]);
-
-  const handleLogin = () => {
-    if (userName.trim()) {
-      onLogin({ name: userName, isGuest: false });
-    }
-  };
-
-  const handleGuest = () => {
-    onLogin({ name: "Guest", isGuest: true });
-  };
 
   const scrollToSection = (id: string) => {
     const element = document.getElementById(id);
@@ -117,7 +96,7 @@ export function LandingPage({ onLogin }: LandingPageProps) {
               whileTap={{ scale: 0.95 }}
             >
               <Button
-                onClick={() => setShowLogin(true)}
+                onClick={onGetStarted}
                 className="bg-[#009966] hover:bg-[#008855] text-white rounded-lg h-8 px-4 text-[14px] shadow-lg hover:shadow-xl transition-all"
               >
                 Get Started
@@ -206,7 +185,7 @@ export function LandingPage({ onLogin }: LandingPageProps) {
                 whileTap={{ scale: 0.95 }}
               >
                 <Button
-                  onClick={() => setShowLogin(true)}
+                  onClick={onGetStarted}
                   size="lg"
                   className="bg-[#009966] hover:bg-[#008855] text-white text-lg px-8 shadow-xl hover:shadow-2xl transition-all group"
                 >
@@ -691,7 +670,7 @@ export function LandingPage({ onLogin }: LandingPageProps) {
               Ayurvedic guidance and AI-powered support.
             </p>
             <Button
-              onClick={() => setShowLogin(true)}
+              onClick={onGetStarted}
               size="lg"
               className="bg-white text-emerald-600 hover:bg-gray-100 text-lg px-10 py-6"
             >
@@ -765,42 +744,6 @@ export function LandingPage({ onLogin }: LandingPageProps) {
           </div>
         </div>
       </footer>
-
-      {/* Login Dialog */}
-      <Dialog open={showLogin} onOpenChange={setShowLogin}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Begin Your Journey</DialogTitle>
-            <DialogDescription>
-              Enter your name to access your personalized wellness dashboard
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 pt-4">
-            <Input
-              placeholder="Enter your name"
-              value={userName}
-              onChange={(e) => setUserName(e.target.value)}
-              onKeyPress={(e) => e.key === "Enter" && handleLogin()}
-            />
-            <div className="flex gap-2">
-              <Button
-                onClick={handleLogin}
-                className="flex-1 bg-[#009966] hover:bg-[#008855]"
-                disabled={!userName.trim()}
-              >
-                Continue
-              </Button>
-              <Button
-                onClick={handleGuest}
-                variant="outline"
-                className="flex-1"
-              >
-                Guest
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Camera, Video, Play, Pause, Wind, Music, Volume2, Sparkles } from 'lucide-react';
 import { Navigation } from './Navigation';
@@ -8,11 +8,16 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Badge } from './ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Slider } from './ui/slider';
-import type { PageType, User } from '../App';
+import type { PageType } from '../App';
+import type { User } from '../types/api.types';
+import api from '../services/api';
+import type { WearableData } from '../types/api.types';
 
 interface YogaLifestylePageProps {
   user: User | null;
   onNavigate: (page: PageType) => void;
+  onLogout?: () => void;
+  onOpenNotifications?: () => void;
 }
 
 interface YogaPose {
@@ -37,7 +42,7 @@ interface SoundTrack {
   gradient: string;
 }
 
-export function YogaLifestylePage({ user, onNavigate }: YogaLifestylePageProps) {
+export function YogaLifestylePage({ user, onNavigate, onLogout, onOpenNotifications }: YogaLifestylePageProps) {
   const [showCamera, setShowCamera] = useState(false);
   const [selectedPose, setSelectedPose] = useState<YogaPose | null>(null);
   const [cameraFeedback, setCameraFeedback] = useState('');
@@ -46,6 +51,31 @@ export function YogaLifestylePage({ user, onNavigate }: YogaLifestylePageProps) 
   const [selectedMood, setSelectedMood] = useState<string>('none');
   const [playingTrack, setPlayingTrack] = useState<string | null>(null);
   const [volume, setVolume] = useState([70]);
+  const [wearableData, setWearableData] = useState<WearableData | null>(null);
+  const [currentUserDosha, setCurrentUserDosha] = useState<'Vata' | 'Pitta' | 'Kapha'>('Vata');
+
+  // Fetch latest wearable data and dosha on mount
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [wearable, doshaData] = await Promise.all([
+          api.getLatestWearable(),
+          api.getCurrentDosha()
+        ]);
+        setWearableData(wearable);
+
+        // Set user's dominant dosha
+        if (doshaData?.dominant_dosha) {
+          const dominantDosha = doshaData.dominant_dosha.charAt(0).toUpperCase() + doshaData.dominant_dosha.slice(1);
+          setCurrentUserDosha(dominantDosha as 'Vata' | 'Pitta' | 'Kapha');
+        }
+      } catch (err) {
+        console.warn('Failed to load user data', err);
+      }
+    };
+
+    loadData();
+  }, []);
 
   const yogaPoses: YogaPose[] = [
     {
@@ -185,9 +215,7 @@ export function YogaLifestylePage({ user, onNavigate }: YogaLifestylePageProps) 
     { value: 'frustrated', label: 'Frustrated', emoji: '😣' },
   ];
 
-  const currentUserDosha: 'Vata' | 'Pitta' | 'Kapha' = 'Vata'; // This would come from user profile
-
-  const filteredTracks = selectedMood === 'none' 
+  const filteredTracks = selectedMood === 'none'
     ? []
     : soundTracks.filter(track => track.dosha === currentUserDosha && track.mood.includes(selectedMood));
 
@@ -211,7 +239,7 @@ export function YogaLifestylePage({ user, onNavigate }: YogaLifestylePageProps) 
   const handleCameraStart = (pose: YogaPose) => {
     setSelectedPose(pose);
     setShowCamera(true);
-    
+
     // Simulate pose detection feedback
     setTimeout(() => {
       setCameraFeedback('Good alignment! Try to straighten your back a bit more.');
@@ -221,7 +249,7 @@ export function YogaLifestylePage({ user, onNavigate }: YogaLifestylePageProps) 
   const startPranayama = () => {
     setIsPranayamaActive(true);
     let phase: 'inhale' | 'hold' | 'exhale' = 'inhale';
-    
+
     const breathingCycle = setInterval(() => {
       if (phase === 'inhale') {
         setBreathPhase('hold');
@@ -248,7 +276,7 @@ export function YogaLifestylePage({ user, onNavigate }: YogaLifestylePageProps) 
 
   return (
     <div className="min-h-screen">
-      <Navigation currentPage="yoga" onNavigate={onNavigate} user={user} />
+      <Navigation currentPage="yoga" onNavigate={onNavigate} onLogout={onLogout} user={user} onOpenNotifications={onOpenNotifications} />
 
       <div className="max-w-7xl mx-auto p-8">
         <motion.div
@@ -294,7 +322,7 @@ export function YogaLifestylePage({ user, onNavigate }: YogaLifestylePageProps) 
                         </div>
                         <Badge variant="outline">{pose.difficulty}</Badge>
                       </div>
-                      
+
                       <div className="space-y-2 mb-3">
                         <p className="text-sm text-gray-600">⏱️ {pose.duration}</p>
                         <div className="text-xs text-gray-500 space-y-1">
@@ -340,17 +368,16 @@ export function YogaLifestylePage({ user, onNavigate }: YogaLifestylePageProps) 
 
                 <div className="flex-1 flex items-center justify-center mb-6">
                   <motion.div
-                    className={`w-40 h-40 rounded-full flex items-center justify-center ${
-                      isPranayamaActive
+                    className={`w-40 h-40 rounded-full flex items-center justify-center ${isPranayamaActive
                         ? 'bg-gradient-to-br from-blue-400 to-purple-400'
                         : 'bg-gradient-to-br from-gray-200 to-gray-300'
-                    }`}
+                      }`}
                     animate={
                       isPranayamaActive
                         ? {
-                            scale: breathPhase === 'inhale' ? [1, 1.3] : breathPhase === 'exhale' ? [1.3, 1] : 1.3,
-                            opacity: breathPhase === 'hold' ? [1, 0.7, 1] : 1,
-                          }
+                          scale: breathPhase === 'inhale' ? [1, 1.3] : breathPhase === 'exhale' ? [1.3, 1] : 1.3,
+                          opacity: breathPhase === 'hold' ? [1, 0.7, 1] : 1,
+                        }
                         : {}
                     }
                     transition={{ duration: 4, ease: "easeInOut" }}
@@ -443,7 +470,7 @@ export function YogaLifestylePage({ user, onNavigate }: YogaLifestylePageProps) 
               <div className="grid md:grid-cols-2 gap-4">
                 {recommendedTracks.map((track, index) => {
                   const isPlaying = playingTrack === track.id;
-                  
+
                   return (
                     <motion.div
                       key={track.id}
@@ -475,11 +502,10 @@ export function YogaLifestylePage({ user, onNavigate }: YogaLifestylePageProps) 
                         <Button
                           onClick={() => togglePlay(track.id)}
                           size="sm"
-                          className={`w-full ${
-                            isPlaying
+                          className={`w-full ${isPlaying
                               ? 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700'
                               : 'bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600'
-                          } text-white`}
+                            } text-white`}
                         >
                           {isPlaying ? (
                             <>

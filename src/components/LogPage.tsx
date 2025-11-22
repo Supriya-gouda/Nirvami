@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Save, Plus, Trash2, Calendar, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Navigation } from './Navigation';
 import { Button } from './ui/button';
@@ -7,18 +7,22 @@ import { Textarea } from './ui/textarea';
 import { Slider } from './ui/slider';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
-import { toast } from 'sonner@2.0.3';
-import type { PageType, User } from '../App';
+import { toast } from 'sonner';
+import type { PageType } from '../App';
+import type { User } from '../types/api.types';
+import api from '../services/api';
 
 interface LogPageProps {
   user: User | null;
   onNavigate: (page: PageType) => void;
+  onLogout?: () => void;
+  onOpenNotifications?: () => void;
 }
 
 interface MealEntry {
   id: string;
   food: string;
-  mealType: 'breakfast' | 'lunch' | 'snacks' | 'dinner';
+  mealType: 'breakfast' | 'lunch' | 'snack' | 'dinner';
 }
 
 interface DailyLog {
@@ -31,11 +35,12 @@ interface DailyLog {
   timestamp: number;
 }
 
-export function LogPage({ user, onNavigate }: LogPageProps) {
+export function LogPage({ user, onNavigate, onLogout, onOpenNotifications }: LogPageProps) {
   const [showCalendar, setShowCalendar] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [viewedMonth, setViewedMonth] = useState(new Date().getMonth());
   const [viewedYear, setViewedYear] = useState(new Date().getFullYear());
+  const [backendLogs, setBackendLogs] = useState<Record<string, DailyLog>>({});
   const [mealEntries, setMealEntries] = useState<MealEntry[]>([
     { id: '1', food: '', mealType: 'breakfast' }
   ]);
@@ -59,6 +64,59 @@ export function LogPage({ user, onNavigate }: LogPageProps) {
     { emoji: '😕', label: 'Confused' },
   ];
 
+  // Fetch logs from backend on mount and when month/year changes
+  useEffect(() => {
+    const fetchBackendLogs = async () => {
+      try {
+        // Fetch last 30 days of emotion and meal logs
+        const endDate = new Date();
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - 30);
+
+        const [emotions, meals] = await Promise.all([
+          api.getEmotionLogs({ start_date: startDate.toISOString().split('T')[0], end_date: endDate.toISOString().split('T')[0] }),
+          api.getMealHistory({ start_date: startDate.toISOString().split('T')[0], end_date: endDate.toISOString().split('T')[0] })
+        ]);
+
+        // Group by date and convert to DailyLog format
+        const logs: Record<string, DailyLog> = {};
+
+        // Process emotions
+        emotions.forEach((emotion: any) => {
+          const date = emotion.timestamp.split('T')[0];
+          if (!logs[date]) {
+            logs[date] = { meals: [], mood: null, moodLabel: null, energyLevel: 50, sleepHours: '0', notes: '', timestamp: new Date(emotion.timestamp).getTime() };
+          }
+          const moodEmoji = moods.find(m => m.label.toLowerCase() === emotion.emotion?.toLowerCase());
+          logs[date].mood = moodEmoji?.emoji || '😊';
+          logs[date].moodLabel = emotion.emotion;
+          logs[date].energyLevel = Math.round((emotion.intensity || 5) * 10);
+          logs[date].notes = emotion.context || logs[date].notes;
+          logs[date].sleepHours = emotion.sleep_hours?.toString() || logs[date].sleepHours;
+        });
+
+        // Process meals
+        meals.forEach((meal: any) => {
+          const date = meal.timestamp.split('T')[0];
+          if (!logs[date]) {
+            logs[date] = { meals: [], mood: null, moodLabel: null, energyLevel: 50, sleepHours: '0', notes: '', timestamp: new Date(meal.timestamp).getTime() };
+          }
+          logs[date].meals.push({
+            id: meal.id || Date.now().toString(),
+            food: meal.meal_name,
+            mealType: meal.meal_type as 'breakfast' | 'lunch' | 'snack' | 'dinner'
+          });
+        });
+
+        setBackendLogs(logs);
+      } catch (err) {
+        console.warn('Failed to fetch backend logs:', err);
+      }
+    };
+
+    fetchBackendLogs();
+  }, [viewedMonth, viewedYear]);
+
   const addMealEntry = () => {
     setMealEntries([
       ...mealEntries,
@@ -73,16 +131,16 @@ export function LogPage({ user, onNavigate }: LogPageProps) {
   };
 
   const updateMealEntry = (id: string, field: 'food' | 'mealType', value: string) => {
-    setMealEntries(mealEntries.map(entry => 
+    setMealEntries(mealEntries.map(entry =>
       entry.id === id ? { ...entry, [field]: value } : entry
     ));
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     // Get today's date in YYYY-MM-DD format
     const today = new Date();
     const dateStr = today.toISOString().split('T')[0];
-    
+
     // Create log entry
     const logEntry: DailyLog = {
       meals: mealEntries.filter(entry => entry.food.trim() !== ''),
@@ -93,17 +151,57 @@ export function LogPage({ user, onNavigate }: LogPageProps) {
       notes: additionalNotes,
       timestamp: Date.now()
     };
-    
+
     // Get existing logs from localStorage
     const existingLogsStr = localStorage.getItem('nirvami_daily_logs');
-    const existingLogs = existingLogsStr ? JSON.parse(existingLogsStr) : {};
-    
+    let existingLogs: Record<string, DailyLog> = {};
+    try {
+      existingLogs = existingLogsStr && existingLogsStr !== 'undefined' ? JSON.parse(existingLogsStr) : {};
+    } catch (e) {
+      console.error('Failed to parse existing logs:', e);
+      existingLogs = {};
+    }
+
     // Save log for today
     existingLogs[dateStr] = logEntry;
     localStorage.setItem('nirvami_daily_logs', JSON.stringify(existingLogs));
-    
-    toast.success('Daily log saved successfully!');
-    
+
+    // Also log emotion and meals to backend
+    try {
+      // Log emotion if mood is selected
+      if (selectedMood && logEntry.moodLabel) {
+        await api.logEmotion({
+          emotion: logEntry.moodLabel.toLowerCase(),
+          intensity: energyLevel[0] / 10,
+          notes: additionalNotes || undefined,
+          detected_from: 'manual'
+        });
+      }
+
+      // Log sleep via wearable endpoint (manual entry)
+      if (sleepHours) {
+        await api.syncWearableData({
+          sleep_hours: parseFloat(sleepHours),
+          device_type: 'manual'
+        });
+      }
+
+      // Log meals to backend
+      for (const meal of logEntry.meals) {
+        await api.logMeal({
+          foods: [meal.food],
+          meal_type: meal.mealType,
+          portion_sizes: { [meal.food]: 'medium' },
+          calories: 0
+        });
+      }
+
+      toast.success('Daily log saved successfully!');
+    } catch (err) {
+      console.warn('Failed to sync with backend, saved locally', err);
+      toast.success('Daily log saved locally!');
+    }
+
     // Reset form
     setMealEntries([{ id: Date.now().toString(), food: '', mealType: 'breakfast' }]);
     setSelectedMood(null);
@@ -112,12 +210,28 @@ export function LogPage({ user, onNavigate }: LogPageProps) {
     setAdditionalNotes('');
   };
 
-  // Get log for a specific date
+  // Get log for a specific date (merges backend and localStorage)
   const getLogForDate = (dateStr: string): DailyLog | null => {
+    // Check backend logs first
+    const backendLog = backendLogs[dateStr];
+
+    // Check localStorage
     const logsStr = localStorage.getItem('nirvami_daily_logs');
-    if (!logsStr) return null;
-    const logs = JSON.parse(logsStr);
-    return logs[dateStr] || null;
+    let localLog: DailyLog | null = null;
+    if (logsStr && logsStr !== 'undefined') {
+      try {
+        const logs = JSON.parse(logsStr);
+        localLog = logs[dateStr] || null;
+      } catch (e) {
+        console.error('Failed to parse logs for date:', e);
+      }
+    }
+
+    // Merge backend and local (local overrides backend if more recent)
+    if (backendLog && localLog) {
+      return localLog.timestamp > backendLog.timestamp ? localLog : backendLog;
+    }
+    return backendLog || localLog;
   };
 
   // Check if a date has a log
@@ -130,18 +244,18 @@ export function LogPage({ user, onNavigate }: LogPageProps) {
     // Use viewed month/year instead of current date
     const year = viewedYear;
     const month = viewedMonth;
-    
+
     // Get first day of month (0 = Sunday)
     const firstDay = new Date(year, month, 1).getDay();
-    
+
     // Get number of days in month
     const daysInMonth = new Date(year, month + 1, 0).getDate();
-    
+
     // Get month name
     const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
-                       'July', 'August', 'September', 'October', 'November', 'December'];
+      'July', 'August', 'September', 'October', 'November', 'December'];
     const monthName = monthNames[month];
-    
+
     return { firstDay, daysInMonth, monthName, year, month };
   };
 
@@ -174,7 +288,7 @@ export function LogPage({ user, onNavigate }: LogPageProps) {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-100 via-blue-50 to-cyan-100 relative overflow-hidden">
-      <Navigation currentPage="manual" onNavigate={onNavigate} user={user} />
+      <Navigation currentPage="manual" onNavigate={onNavigate} onLogout={onLogout} user={user} onOpenNotifications={onOpenNotifications} />
 
       <div className="max-w-5xl mx-auto p-6 md:p-8 relative z-10">
         {/* Header */}
@@ -230,7 +344,7 @@ export function LogPage({ user, onNavigate }: LogPageProps) {
                       <SelectContent className="bg-white/95 backdrop-blur-xl border-white/50">
                         <SelectItem value="breakfast">🌅 Breakfast</SelectItem>
                         <SelectItem value="lunch">☀️ Lunch</SelectItem>
-                        <SelectItem value="snacks">🍎 Snacks</SelectItem>
+                        <SelectItem value="snack">🍎 Snacks</SelectItem>
                         <SelectItem value="dinner">🌙 Dinner</SelectItem>
                       </SelectContent>
                     </Select>
@@ -253,17 +367,16 @@ export function LogPage({ user, onNavigate }: LogPageProps) {
           {/* Mood Selection */}
           <div className="relative bg-white/40 backdrop-blur-xl rounded-3xl p-6 border border-white/50 shadow-xl">
             <h2 className="text-xl text-gray-800 mb-6">How are you feeling?</h2>
-            
+
             <div className="grid grid-cols-4 md:grid-cols-6 gap-3">
               {moods.map((mood) => (
                 <button
                   key={mood.emoji}
                   onClick={() => setSelectedMood(mood.emoji)}
-                  className={`aspect-square rounded-2xl flex flex-col items-center justify-center gap-2 transition-all ${
-                    selectedMood === mood.emoji
-                      ? 'bg-gradient-to-br from-purple-100 to-pink-100 ring-4 ring-purple-400 scale-105'
-                      : 'bg-white/60 hover:bg-white/80'
-                  }`}
+                  className={`aspect-square rounded-2xl flex flex-col items-center justify-center gap-2 transition-all ${selectedMood === mood.emoji
+                    ? 'bg-gradient-to-br from-purple-100 to-pink-100 ring-4 ring-purple-400 scale-105'
+                    : 'bg-white/60 hover:bg-white/80'
+                    }`}
                 >
                   <span className="text-3xl md:text-4xl">{mood.emoji}</span>
                   <span className="text-xs text-gray-600">{mood.label}</span>
@@ -283,7 +396,7 @@ export function LogPage({ user, onNavigate }: LogPageProps) {
           {/* Mood & Energy Levels */}
           <div className="relative bg-white/40 backdrop-blur-xl rounded-3xl p-6 border border-white/50 shadow-xl">
             <h2 className="text-xl text-gray-800 mb-6">Mood & Energy Levels</h2>
-            
+
             <div className="space-y-6">
               <div>
                 <label className="text-sm text-gray-700 mb-3 block">
@@ -322,7 +435,7 @@ export function LogPage({ user, onNavigate }: LogPageProps) {
           {/* Sleep Duration */}
           <div className="relative bg-white/40 backdrop-blur-xl rounded-3xl p-6 border border-white/50 shadow-xl">
             <h2 className="text-xl text-gray-800 mb-6">Sleep Duration</h2>
-            
+
             <div className="max-w-md">
               <label className="text-sm text-gray-700 mb-3 block">
                 Hours of Sleep Last Night
@@ -342,17 +455,16 @@ export function LogPage({ user, onNavigate }: LogPageProps) {
               </p>
 
               {sleepHours && (
-                <div className={`mt-4 p-4 rounded-2xl backdrop-blur-sm ${
-                  parseFloat(sleepHours) >= 7 && parseFloat(sleepHours) <= 9
-                    ? 'bg-gradient-to-br from-green-100/60 to-emerald-100/60'
-                    : 'bg-gradient-to-br from-orange-100/60 to-amber-100/60'
-                }`}>
+                <div className={`mt-4 p-4 rounded-2xl backdrop-blur-sm ${parseFloat(sleepHours) >= 7 && parseFloat(sleepHours) <= 9
+                  ? 'bg-gradient-to-br from-green-100/60 to-emerald-100/60'
+                  : 'bg-gradient-to-br from-orange-100/60 to-amber-100/60'
+                  }`}>
                   <p className="text-sm">
                     {parseFloat(sleepHours) >= 7 && parseFloat(sleepHours) <= 9
                       ? '✅ Great! You got optimal sleep.'
                       : parseFloat(sleepHours) < 7
-                      ? '⚠️ Consider getting more sleep for better wellness.'
-                      : '⚠️ You might be oversleeping. Aim for 7-9 hours.'}
+                        ? '⚠️ Consider getting more sleep for better wellness.'
+                        : '⚠️ You might be oversleeping. Aim for 7-9 hours.'}
                   </p>
                 </div>
               )}
@@ -362,7 +474,7 @@ export function LogPage({ user, onNavigate }: LogPageProps) {
           {/* Additional Notes */}
           <div className="relative bg-white/40 backdrop-blur-xl rounded-3xl p-6 border border-white/50 shadow-xl">
             <h2 className="text-xl text-gray-800 mb-6">Additional Notes</h2>
-            
+
             <Textarea
               value={additionalNotes}
               onChange={(e) => setAdditionalNotes(e.target.value)}
@@ -398,33 +510,33 @@ export function LogPage({ user, onNavigate }: LogPageProps) {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Calendar className="w-5 h-5 text-purple-600" />
-              {selectedDate 
+              {selectedDate
                 ? 'Daily Log Details'
                 : `${getCurrentMonthData().monthName} ${getCurrentMonthData().year} - Wellness History`
               }
             </DialogTitle>
             <DialogDescription>
-              {selectedDate 
+              {selectedDate
                 ? 'View your wellness log for the selected day.'
                 : 'Click on a highlighted day to view your saved log.'
               }
             </DialogDescription>
           </DialogHeader>
-          
+
           {selectedDate ? (
             // Show log details for selected date
             (() => {
               const log = getLogForDate(selectedDate);
               if (!log) return null;
-              
+
               const date = new Date(selectedDate);
-              const formattedDate = date.toLocaleDateString('en-US', { 
-                weekday: 'long', 
-                year: 'numeric', 
-                month: 'long', 
-                day: 'numeric' 
+              const formattedDate = date.toLocaleDateString('en-US', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
               });
-              
+
               return (
                 <div className="space-y-4">
                   {/* Back button */}
@@ -436,13 +548,13 @@ export function LogPage({ user, onNavigate }: LogPageProps) {
                   >
                     ← Back to Calendar
                   </Button>
-                  
+
                   {/* Date header */}
                   <div className="bg-gradient-to-r from-purple-100 to-pink-100 rounded-2xl p-4">
                     <h3 className="text-lg text-gray-800">{formattedDate}</h3>
                     <p className="text-sm text-gray-600">Logged at {new Date(log.timestamp).toLocaleTimeString()}</p>
                   </div>
-                  
+
                   {/* Meals */}
                   {log.meals.length > 0 && (
                     <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-5 border border-white/50">
@@ -451,9 +563,9 @@ export function LogPage({ user, onNavigate }: LogPageProps) {
                         {log.meals.map((meal, index) => (
                           <div key={index} className="flex items-center gap-3 p-3 bg-white/80 rounded-xl">
                             <span className="text-lg">
-                              {meal.mealType === 'breakfast' ? '🌅' : 
-                               meal.mealType === 'lunch' ? '☀️' : 
-                               meal.mealType === 'snacks' ? '🍎' : '🌙'}
+                              {meal.mealType === 'breakfast' ? '🌅' :
+                                meal.mealType === 'lunch' ? '☀️' :
+                                  meal.mealType === 'snack' ? '🍎' : '🌙'}
                             </span>
                             <div className="flex-1">
                               <p className="text-sm text-gray-800">{meal.food}</p>
@@ -464,7 +576,7 @@ export function LogPage({ user, onNavigate }: LogPageProps) {
                       </div>
                     </div>
                   )}
-                  
+
                   {/* Mood & Energy */}
                   <div className="grid md:grid-cols-2 gap-4">
                     <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-5 border border-white/50">
@@ -478,21 +590,22 @@ export function LogPage({ user, onNavigate }: LogPageProps) {
                         <p className="text-gray-500 text-sm">No mood recorded</p>
                       )}
                     </div>
-                    
+
                     <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-5 border border-white/50">
                       <h4 className="text-gray-800 mb-3">⚡ Energy Level</h4>
                       <div className="space-y-2">
                         <p className="text-2xl text-purple-600">{log.energyLevel}%</p>
                         <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                          <div 
+                          <div
                             className="h-full bg-gradient-to-r from-purple-400 to-pink-400 rounded-full"
+                            /* eslint-disable-next-line react/forbid-dom-props */
                             style={{ width: `${log.energyLevel}%` }}
                           />
                         </div>
                       </div>
                     </div>
                   </div>
-                  
+
                   {/* Sleep */}
                   <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-5 border border-white/50">
                     <h4 className="text-gray-800 mb-3">😴 Sleep Duration</h4>
@@ -502,12 +615,12 @@ export function LogPage({ user, onNavigate }: LogPageProps) {
                         {parseFloat(log.sleepHours) >= 7 && parseFloat(log.sleepHours) <= 9
                           ? '✅ Optimal sleep range'
                           : parseFloat(log.sleepHours) < 7
-                          ? '⚠️ Below recommended range'
-                          : '⚠️ Above recommended range'}
+                            ? '⚠️ Below recommended range'
+                            : '⚠️ Above recommended range'}
                       </p>
                     )}
                   </div>
-                  
+
                   {/* Notes */}
                   {log.notes && (
                     <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-5 border border-white/50">
@@ -526,7 +639,7 @@ export function LogPage({ user, onNavigate }: LogPageProps) {
                 <div className="text-center mb-2">
                   <p className="text-sm text-gray-600">{getCurrentMonthData().year}</p>
                 </div>
-                
+
                 {/* Month navigation */}
                 <div className="flex items-center justify-between mb-4">
                   <Button
@@ -537,11 +650,11 @@ export function LogPage({ user, onNavigate }: LogPageProps) {
                   >
                     <ChevronLeft className="w-5 h-5 text-gray-700" />
                   </Button>
-                  
+
                   <h3 className="text-lg text-gray-800">
                     {getCurrentMonthData().monthName}
                   </h3>
-                  
+
                   <Button
                     variant="ghost"
                     size="icon"
@@ -551,7 +664,7 @@ export function LogPage({ user, onNavigate }: LogPageProps) {
                     <ChevronRight className="w-5 h-5 text-gray-700" />
                   </Button>
                 </div>
-                
+
                 {/* Calendar grid */}
                 <div className="grid grid-cols-7 gap-2">
                   {/* Day headers */}
@@ -560,12 +673,12 @@ export function LogPage({ user, onNavigate }: LogPageProps) {
                       {day}
                     </div>
                   ))}
-                  
+
                   {/* Empty cells for days before month starts */}
                   {Array.from({ length: getCurrentMonthData().firstDay }).map((_, i) => (
                     <div key={`empty-${i}`} className="aspect-square" />
                   ))}
-                  
+
                   {/* Actual days of the month */}
                   {Array.from({ length: getCurrentMonthData().daysInMonth }, (_, dayIndex) => {
                     const day = dayIndex + 1;
@@ -573,19 +686,17 @@ export function LogPage({ user, onNavigate }: LogPageProps) {
                     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                     const hasLog = hasLogForDate(dateStr);
                     const isToday = dateStr === new Date().toISOString().split('T')[0];
-                    
+
                     return (
                       <button
                         key={day}
                         onClick={() => handleDateClick(dateStr)}
                         disabled={!hasLog}
-                        className={`aspect-square p-2 rounded-xl flex items-center justify-center text-sm transition-all ${
-                          hasLog
-                            ? 'bg-gradient-to-br from-purple-100 to-pink-100 text-purple-700 hover:scale-110 hover:shadow-lg cursor-pointer'
-                            : 'bg-gray-50 text-gray-400 cursor-not-allowed'
-                        } ${
-                          isToday ? 'ring-2 ring-purple-500 ring-offset-2' : ''
-                        }`}
+                        className={`aspect-square p-2 rounded-xl flex items-center justify-center text-sm transition-all ${hasLog
+                          ? 'bg-gradient-to-br from-purple-100 to-pink-100 text-purple-700 hover:scale-110 hover:shadow-lg cursor-pointer'
+                          : 'bg-gray-50 text-gray-400 cursor-not-allowed'
+                          } ${isToday ? 'ring-2 ring-purple-500 ring-offset-2' : ''
+                          }`}
                         title={hasLog ? `View log for ${dateStr}` : 'No log for this day'}
                       >
                         {day}
@@ -594,7 +705,7 @@ export function LogPage({ user, onNavigate }: LogPageProps) {
                   })}
                 </div>
               </div>
-              
+
               {/* Legend */}
               <div className="flex items-center justify-center gap-6 p-4 bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl">
                 <div className="flex items-center gap-2">

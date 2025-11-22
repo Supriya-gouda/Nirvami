@@ -1,0 +1,6 @@
+{
+  "extends": [],
+  "rules": {
+    "react/forbid-dom-props": "off"
+  }
+}

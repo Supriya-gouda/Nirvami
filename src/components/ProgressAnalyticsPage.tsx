@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { TrendingUp, Download, Award, Calendar, Target } from 'lucide-react';
 import { Navigation } from './Navigation';
@@ -24,19 +24,28 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts';
-import type { PageType, User } from '../App';
+import type { PageType } from '../App';
+import type { User } from '../types/api.types';
+import api from '../services/api';
+import type { AnalyticsData } from '../types/api.types';
 
 interface ProgressAnalyticsPageProps {
   user: User | null;
   onNavigate: (page: PageType) => void;
+  onLogout?: () => void;
+  onOpenNotifications?: () => void;
 }
 
-export function ProgressAnalyticsPage({ user, onNavigate }: ProgressAnalyticsPageProps) {
+export function ProgressAnalyticsPage({ user, onNavigate, onLogout, onOpenNotifications }: ProgressAnalyticsPageProps) {
   const [showAchievement, setShowAchievement] = useState(false);
   const [timeframe, setTimeframe] = useState<'week' | 'month'>('week');
 
-  // Mock data for mood trends
-  const weeklyMoodData = [
+  // Analytics state (fetched from backend) with fallbacks to mock data
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
+  const [loadingAnalytics, setLoadingAnalytics] = useState<boolean>(false);
+
+  // Mock fallback data for quick visualization when analytics not yet available
+  const weeklyMoodFallback = [
     { date: 'Mon', mood: 7, stress: 4, energy: 6, balance: 7 },
     { date: 'Tue', mood: 6, stress: 5, energy: 5, balance: 6 },
     { date: 'Wed', mood: 8, stress: 3, energy: 8, balance: 8 },
@@ -46,29 +55,130 @@ export function ProgressAnalyticsPage({ user, onNavigate }: ProgressAnalyticsPag
     { date: 'Sun', mood: 7, stress: 4, energy: 6, balance: 7 },
   ];
 
-  const monthlyMoodData = [
+  const monthlyMoodFallback = [
     { date: 'Week 1', mood: 6.5, stress: 4.5, energy: 6, balance: 6.5 },
     { date: 'Week 2', mood: 7, stress: 4, energy: 6.5, balance: 7 },
     { date: 'Week 3', mood: 7.5, stress: 3.5, energy: 7, balance: 7.5 },
     { date: 'Week 4', mood: 8, stress: 3, energy: 7.5, balance: 8 },
   ];
 
-  // Dosha balance radar data
-  const doshaData = [
-    { aspect: 'Vata', current: 65, optimal: 80 },
-    { aspect: 'Pitta', current: 85, optimal: 70 },
-    { aspect: 'Kapha', current: 70, optimal: 75 },
-  ];
+  useEffect(() => {
+    const loadAnalytics = async () => {
+      try {
+        setLoadingAnalytics(true);
+        const data = await api.getAnalytics();
+        setAnalytics(data);
+      } catch (err) {
+        console.warn('Failed to load analytics, using fallback data', err);
+        setAnalytics(null);
+      } finally {
+        setLoadingAnalytics(false);
+      }
+    };
 
-  // Wellness dimensions
-  const wellnessData = [
-    { dimension: 'Sleep', score: 80 },
-    { dimension: 'Nutrition', score: 75 },
-    { dimension: 'Exercise', score: 70 },
-    { dimension: 'Mindfulness', score: 85 },
-    { dimension: 'Social', score: 65 },
-    { dimension: 'Purpose', score: 78 },
-  ];
+    loadAnalytics();
+  }, []);
+
+  // Transform analytics data for charts
+  const getMoodTrendsData = () => {
+    if (!analytics?.emotions?.emotions_over_time) {
+      return timeframe === 'week' ? weeklyMoodFallback : monthlyMoodFallback;
+    }
+
+    const emotionsData = analytics.emotions.emotions_over_time;
+    const recentData = timeframe === 'week'
+      ? emotionsData.slice(-7)
+      : emotionsData.slice(-30);
+
+    return recentData.map((entry: any) => {
+      const emotions = entry.emotions || {};
+      const moodScore = Object.values(emotions).reduce((sum: number, val: any) => sum + (val || 0), 0) / Math.max(Object.keys(emotions).length, 1);
+      const stressScore = (emotions.anxiety || 0) + (emotions.fear || 0) + (emotions.anger || 0);
+
+      return {
+        date: new Date(entry.date).toLocaleDateString('en-US', { weekday: 'short' }),
+        mood: Number(moodScore.toFixed(1)),
+        stress: Number(stressScore.toFixed(1)),
+        energy: entry.valence || 5,
+        balance: entry.arousal || 5
+      };
+    });
+  };
+
+  // Get key metrics from analytics
+  const getKeyMetrics = () => {
+    if (!analytics) {
+      return {
+        avgMood: 7.4,
+        moodChange: 12,
+        stressLevel: 3.6,
+        stressChange: -23,
+        energy: 7.1,
+        energyChange: 18,
+        balance: 7.5,
+        balanceChange: 15
+      };
+    }
+
+    const emotions = analytics.emotions?.emotions_over_time || [];
+    const recent = emotions.slice(-7);
+    const previous = emotions.slice(-14, -7);
+
+    const calcAvg = (data: any[], key: string) => {
+      if (!data.length) return 0;
+      return data.reduce((sum, item) => sum + (item[key] || 0), 0) / data.length;
+    };
+
+    const recentAvgMood = calcAvg(recent, 'valence') * 10;
+    const previousAvgMood = calcAvg(previous, 'valence') * 10;
+    const moodChange = previousAvgMood ? ((recentAvgMood - previousAvgMood) / previousAvgMood) * 100 : 0;
+
+    const recentStress = calcAvg(recent, 'arousal');
+    const previousStress = calcAvg(previous, 'arousal');
+    const stressChange = previousStress ? ((recentStress - previousStress) / previousStress) * 100 : 0;
+
+    return {
+      avgMood: Number(recentAvgMood.toFixed(1)),
+      moodChange: Number(moodChange.toFixed(0)),
+      stressLevel: Number(recentStress.toFixed(1)),
+      stressChange: Number(stressChange.toFixed(0)),
+      energy: Number((calcAvg(recent, 'valence') * 10).toFixed(1)),
+      energyChange: 18,
+      balance: Number((analytics.wellness_trend?.[0]?.score || 75) / 10).toFixed(1),
+      balanceChange: 15
+    };
+  };
+
+  // Dosha and wellness data - attempt to read from analytics, fallback to static
+  const doshaData = analytics?.wellness_trend && analytics.wellness_trend.length >= 3
+    ? [
+      { aspect: 'Vata', current: analytics.wellness_trend[0]?.score ?? 60, optimal: 80 },
+      { aspect: 'Pitta', current: analytics.wellness_trend[1]?.score ?? 50, optimal: 70 },
+      { aspect: 'Kapha', current: analytics.wellness_trend[2]?.score ?? 55, optimal: 75 },
+    ]
+    : [
+      { aspect: 'Vata', current: 65, optimal: 80 },
+      { aspect: 'Pitta', current: 85, optimal: 70 },
+      { aspect: 'Kapha', current: 70, optimal: 75 },
+    ];
+
+  const wellnessData = analytics?.wearable_insights
+    ? [
+      { dimension: 'Sleep', score: Math.min(100, (analytics.wearable_insights.average_sleep || 7) * 12.5) },
+      { dimension: 'Nutrition', score: analytics.meal_patterns?.meals_logged ? Math.min(100, analytics.meal_patterns.meals_logged * 3) : 75 },
+      { dimension: 'Exercise', score: analytics.wearable_insights.total_steps ? Math.min(100, (analytics.wearable_insights.total_steps / 10000) * 100) : 70 },
+      { dimension: 'Mindfulness', score: analytics.emotions?.average_valence ? analytics.emotions.average_valence * 100 : 85 },
+      { dimension: 'Social', score: 65 },
+      { dimension: 'Purpose', score: analytics.wellness_trend?.[0]?.score || 78 },
+    ]
+    : [
+      { dimension: 'Sleep', score: 80 },
+      { dimension: 'Nutrition', score: 75 },
+      { dimension: 'Exercise', score: 70 },
+      { dimension: 'Mindfulness', score: 85 },
+      { dimension: 'Social', score: 65 },
+      { dimension: 'Purpose', score: 78 },
+    ];
 
   const achievements = [
     { id: 1, title: '7-Day Streak', desc: 'Logged daily for a week', emoji: '🔥', unlocked: true },
@@ -79,6 +189,9 @@ export function ProgressAnalyticsPage({ user, onNavigate }: ProgressAnalyticsPag
     { id: 6, title: 'Zen Master', desc: '100 meditation minutes', emoji: '☮️', unlocked: false },
   ];
 
+  const metrics = getKeyMetrics();
+  const moodTrendsData = getMoodTrendsData();
+
   const handleDownloadReport = () => {
     // Simulate PDF download
     alert('Your wellness report is being generated and will download shortly!');
@@ -86,7 +199,7 @@ export function ProgressAnalyticsPage({ user, onNavigate }: ProgressAnalyticsPag
 
   return (
     <div className="min-h-screen">
-      <Navigation currentPage="progress" onNavigate={onNavigate} user={user} />
+      <Navigation currentPage="progress" onNavigate={onNavigate} onLogout={onLogout} user={user} onOpenNotifications={onOpenNotifications} />
 
       <div className="max-w-7xl mx-auto p-8">
         <motion.div
@@ -114,10 +227,10 @@ export function ProgressAnalyticsPage({ user, onNavigate }: ProgressAnalyticsPag
           className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"
         >
           {[
-            { label: 'Avg Mood', value: '7.4', change: '+12%', icon: '😊', color: 'from-yellow-400 to-orange-400' },
-            { label: 'Stress Level', value: '3.6', change: '-23%', icon: '🧘', color: 'from-green-400 to-teal-400' },
-            { label: 'Energy', value: '7.1', change: '+18%', icon: '⚡', color: 'from-blue-400 to-purple-400' },
-            { label: 'Balance', value: '7.5', change: '+15%', icon: '☯️', color: 'from-pink-400 to-purple-400' },
+            { label: 'Avg Mood', value: metrics.avgMood, change: `${metrics.moodChange > 0 ? '+' : ''}${metrics.moodChange}%`, icon: '😊', color: 'from-yellow-400 to-orange-400', positive: metrics.moodChange > 0 },
+            { label: 'Stress Level', value: metrics.stressLevel, change: `${metrics.stressChange > 0 ? '+' : ''}${metrics.stressChange}%`, icon: '🧘', color: 'from-green-400 to-teal-400', positive: metrics.stressChange < 0 },
+            { label: 'Energy', value: metrics.energy, change: `${metrics.energyChange > 0 ? '+' : ''}${metrics.energyChange}%`, icon: '⚡', color: 'from-blue-400 to-purple-400', positive: metrics.energyChange > 0 },
+            { label: 'Balance', value: metrics.balance, change: `${metrics.balanceChange > 0 ? '+' : ''}${metrics.balanceChange}%`, icon: '☯️', color: 'from-pink-400 to-purple-400', positive: metrics.balanceChange > 0 },
           ].map((metric, index) => (
             <motion.div
               key={metric.label}
@@ -134,7 +247,7 @@ export function ProgressAnalyticsPage({ user, onNavigate }: ProgressAnalyticsPag
                   <p className="text-sm text-gray-600 mb-1">{metric.label}</p>
                   <div className="flex items-end justify-between">
                     <p className="text-2xl">{metric.value}</p>
-                    <Badge variant="outline" className="text-green-600 border-green-600">
+                    <Badge variant="outline" className={metric.positive ? "text-green-600 border-green-600" : "text-red-600 border-red-600"}>
                       {metric.change}
                     </Badge>
                   </div>
@@ -168,7 +281,7 @@ export function ProgressAnalyticsPage({ user, onNavigate }: ProgressAnalyticsPag
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
-                <AreaChart data={timeframe === 'week' ? weeklyMoodData : monthlyMoodData}>
+                <AreaChart data={moodTrendsData}>
                   <defs>
                     <linearGradient id="colorMood" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.8} />
@@ -282,11 +395,10 @@ export function ProgressAnalyticsPage({ user, onNavigate }: ProgressAnalyticsPag
                     transition={{ delay: 0.7 + index * 0.05 }}
                     whileHover={{ scale: achievement.unlocked ? 1.1 : 1, rotate: achievement.unlocked ? 5 : 0 }}
                     onClick={() => achievement.unlocked && setShowAchievement(true)}
-                    className={`p-4 rounded-xl text-center cursor-pointer ${
-                      achievement.unlocked
+                    className={`p-4 rounded-xl text-center cursor-pointer ${achievement.unlocked
                         ? 'bg-gradient-to-br from-yellow-50 to-orange-50 border-2 border-yellow-400'
                         : 'bg-gray-100 opacity-50'
-                    }`}
+                      }`}
                   >
                     <div className="text-4xl mb-2">{achievement.emoji}</div>
                     <p className="text-xs text-gray-700">{achievement.title}</p>

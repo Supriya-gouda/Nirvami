@@ -1,0 +1,42 @@
+# FastAPI and Server
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-dotenv==1.0.0
+
+# Supabase
+supabase==2.3.4
+postgrest==0.13.2
+
+# Database
+psycopg2-binary==2.9.9
+sqlalchemy==2.0.25
+pgvector==0.2.4
+
+# ML Models and NLP
+transformers==4.37.0
+torch==2.1.2
+sentence-transformers==2.3.1
+scikit-learn==1.4.0
+numpy==1.26.3
+pandas==2.2.0
+
+# Background Jobs
+rq==1.16.1
+redis==5.0.1
+schedule==1.2.0
+
+# Communication
+twilio==8.11.1
+emails==0.6
+
+# Google Gemini AI
+google-generativeai>=0.8.0
+
+# Utilities
+pydantic==2.5.3
+pydantic-settings==2.1.0
+httpx<0.26,>=0.24
+aiofiles==23.2.1

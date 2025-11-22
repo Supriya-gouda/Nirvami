@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { UtensilsCrossed, TrendingUp, AlertCircle, ChefHat } from 'lucide-react';
 import { Navigation } from './Navigation';
@@ -7,54 +7,130 @@ import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import type { PageType, User } from '../App';
+import type { PageType } from '../App';
+import type { User } from '../types/api.types';
+import api from '../services/api';
+import type { MealMoodCorrelation } from '../types/api.types';
 
 interface DietMoodPageProps {
   user: User | null;
   onNavigate: (page: PageType) => void;
+  onLogout?: () => void;
+  onOpenNotifications?: () => void;
 }
 
-export function DietMoodPage({ user, onNavigate }: DietMoodPageProps) {
+export function DietMoodPage({ user, onNavigate, onLogout, onOpenNotifications }: DietMoodPageProps) {
   const [showRecipe, setShowRecipe] = useState(false);
   const [selectedRecipe, setSelectedRecipe] = useState<any>(null);
+  const [correlations, setCorrelations] = useState<MealMoodCorrelation[]>([]);
+  const [mealHistory, setMealHistory] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  // Mock data for meal-mood correlation
-  const correlationData = [
-    { day: 'Mon', mood: 7, meals: 3, quality: 8 },
-    { day: 'Tue', mood: 6, meals: 3, quality: 6 },
-    { day: 'Wed', mood: 8, meals: 4, quality: 9 },
-    { day: 'Thu', mood: 5, meals: 2, quality: 4 },
-    { day: 'Fri', mood: 9, meals: 3, quality: 9 },
-    { day: 'Sat', mood: 8, meals: 4, quality: 8 },
-    { day: 'Sun', mood: 7, meals: 3, quality: 7 },
-  ];
+  // Fetch meal-mood correlation and meal history from backend
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        const endDate = new Date();
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - 7);
 
-  const mealLogs = [
-    {
-      time: '8:00 AM',
-      meal: 'Breakfast',
-      items: ['Oatmeal with berries', 'Green tea', 'Almonds'],
-      dosha: 'Vata balancing',
-      mood: 'Energetic',
-      moodScore: 8,
-    },
-    {
-      time: '1:00 PM',
-      meal: 'Lunch',
-      items: ['Quinoa salad', 'Grilled vegetables', 'Lentil soup'],
-      dosha: 'Pitta cooling',
-      mood: 'Calm',
-      moodScore: 7,
-    },
-    {
-      time: '7:00 PM',
-      meal: 'Dinner',
-      items: ['Steamed fish', 'Brown rice', 'Cucumber raita'],
-      dosha: 'Kapha reducing',
-      mood: 'Satisfied',
-      moodScore: 8,
-    },
-  ];
+        const [corrData, historyData] = await Promise.all([
+          api.getMealMoodCorrelations(),
+          api.getMealHistory({ start_date: startDate.toISOString().split('T')[0], end_date: endDate.toISOString().split('T')[0] })
+        ]);
+
+        setCorrelations(corrData);
+        setMealHistory(historyData || []);
+      } catch (err) {
+        console.warn('Failed to load data, using fallback', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
+  }, []);
+
+  // Map backend data to chart format, with fallback
+  const correlationData = mealHistory.length > 0
+    ? (() => {
+      // Group by day
+      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const dailyStats: Record<string, { moodSum: number; count: number; mealCount: number }> = {};
+
+      mealHistory.forEach(meal => {
+        const date = new Date(meal.timestamp);
+        const day = days[date.getDay()];
+        if (!dailyStats[day]) {
+          dailyStats[day] = { moodSum: 0, count: 0, mealCount: 0 };
+        }
+        dailyStats[day].mealCount++;
+        if (meal.mood_after) {
+          // Simple mapping of mood string to score if needed, or assume it's already a score or map it
+          // For now, let's assume we can't easily map string to number without a map, so we'll use a default or try to parse
+          // If mood_after is a string like "Happy", we need a map.
+          // Let's use a simple map or random for demo if real score missing
+          const moodMap: Record<string, number> = { 'happy': 8, 'calm': 7, 'neutral': 5, 'sad': 3, 'anxious': 2, 'energetic': 9 };
+          const score = moodMap[meal.mood_after.toLowerCase()] || 6;
+          dailyStats[day].moodSum += score;
+          dailyStats[day].count++;
+        }
+      });
+
+      return Object.entries(dailyStats).map(([day, stats]) => ({
+        day,
+        mood: stats.count ? Number((stats.moodSum / stats.count).toFixed(1)) : 0,
+        meals: stats.mealCount,
+        quality: stats.count ? Number((stats.moodSum / stats.count).toFixed(1)) : 0
+      }));
+    })()
+    : [
+      { day: 'Mon', mood: 7, meals: 3, quality: 8 },
+      { day: 'Tue', mood: 6, meals: 3, quality: 6 },
+      { day: 'Wed', mood: 8, meals: 4, quality: 9 },
+      { day: 'Thu', mood: 5, meals: 2, quality: 4 },
+      { day: 'Fri', mood: 9, meals: 3, quality: 9 },
+      { day: 'Sat', mood: 8, meals: 4, quality: 8 },
+      { day: 'Sun', mood: 7, meals: 3, quality: 7 },
+    ];
+
+  // Use backend meal history or fallback to mock
+  const mealLogs = mealHistory.length > 0
+    ? mealHistory.slice(-3).map((meal) => ({
+      time: new Date(meal.timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+      meal: meal.meal_type.charAt(0).toUpperCase() + meal.meal_type.slice(1),
+      items: [meal.meal_name],
+      dosha: 'Balanced', // specific dosha impact not currently returned by API
+      mood: meal.mood_after || 'Neutral',
+      moodScore: 7, // mood score not currently returned by API
+    }))
+    : [
+      {
+        time: '8:00 AM',
+        meal: 'Breakfast',
+        items: ['Oatmeal with berries', 'Green tea', 'Almonds'],
+        dosha: 'Vata balancing',
+        mood: 'Energetic',
+        moodScore: 8,
+      },
+      {
+        time: '1:00 PM',
+        meal: 'Lunch',
+        items: ['Quinoa salad', 'Grilled vegetables', 'Lentil soup'],
+        dosha: 'Pitta cooling',
+        mood: 'Calm',
+        moodScore: 7,
+      },
+      {
+        time: '7:00 PM',
+        meal: 'Dinner',
+        items: ['Steamed fish', 'Brown rice', 'Cucumber raita'],
+        dosha: 'Kapha reducing',
+        mood: 'Satisfied',
+        moodScore: 8,
+      },
+    ];
 
   const doshaFoods = {
     vata: {
@@ -111,7 +187,7 @@ export function DietMoodPage({ user, onNavigate }: DietMoodPageProps) {
 
   return (
     <div className="min-h-screen">
-      <Navigation currentPage="diet" onNavigate={onNavigate} user={user} />
+      <Navigation currentPage="diet" onNavigate={onNavigate} onLogout={onLogout} user={user} onOpenNotifications={onOpenNotifications} />
 
       <div className="max-w-7xl mx-auto p-8">
         <motion.div
@@ -197,9 +273,8 @@ export function DietMoodPage({ user, onNavigate }: DietMoodPageProps) {
                         {Array.from({ length: 10 }, (_, i) => (
                           <div
                             key={i}
-                            className={`w-2 h-2 rounded-full ${
-                              i < log.moodScore ? 'bg-green-500' : 'bg-gray-300'
-                            }`}
+                            className={`w-2 h-2 rounded-full ${i < log.moodScore ? 'bg-green-500' : 'bg-gray-300'
+                              }`}
                           />
                         ))}
                       </div>
@@ -338,7 +413,7 @@ export function DietMoodPage({ user, onNavigate }: DietMoodPageProps) {
                 <Badge>{selectedRecipe.prepTime}</Badge>
                 <Badge variant="outline">{selectedRecipe.dosha}</Badge>
               </div>
-              
+
               <div>
                 <h4 className="text-sm text-gray-900 mb-2">Ingredients:</h4>
                 <ul className="list-disc list-inside text-sm text-gray-700 space-y-1">

@@ -1,16 +1,21 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Send, Mic, MicOff, Sparkles } from 'lucide-react';
+import { Send, Mic, MicOff, Sparkles, AlertTriangle } from 'lucide-react';
 import { Navigation } from './Navigation';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Card } from './ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
-import type { PageType, User } from '../App';
+import { Alert, AlertDescription } from './ui/alert';
+import api from '../services/api';
+import type { PageType } from '../App';
+import type { ChatMessage, SendMessageResponse, User } from '../types/api.types';
 
 interface ChatbotPageProps {
   user: User | null;
   onNavigate: (page: PageType) => void;
+  onLogout?: () => void;
+  onOpenNotifications?: () => void;
 }
 
 interface Message {
@@ -18,13 +23,15 @@ interface Message {
   text: string;
   sender: 'user' | 'bot';
   timestamp: Date;
+  emotion?: string;
+  crisisDetected?: boolean;
 }
 
-export function ChatbotPage({ user, onNavigate }: ChatbotPageProps) {
+export function ChatbotPage({ user, onNavigate, onLogout, onOpenNotifications }: ChatbotPageProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
-      text: `Hello ${user?.name}! I'm your AI wellness companion. How are you feeling today?`,
+      text: `Hello ${user?.full_name || 'User'}! I'm your AI wellness companion powered by Ayurvedic wisdom. How are you feeling today?`,
       sender: 'bot',
       timestamp: new Date(),
     },
@@ -33,6 +40,9 @@ export function ChatbotPage({ user, onNavigate }: ChatbotPageProps) {
   const [isListening, setIsListening] = useState(false);
   const [showVoiceConfirm, setShowVoiceConfirm] = useState(false);
   const [voiceText, setVoiceText] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [sessionId, setSessionId] = useState<string | undefined>(undefined);
+  const [crisisAlert, setCrisisAlert] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const suggestedResponses = [
@@ -50,8 +60,40 @@ export function ChatbotPage({ user, onNavigate }: ChatbotPageProps) {
     scrollToBottom();
   }, [messages]);
 
-  const handleSendMessage = (text: string) => {
-    if (!text.trim()) return;
+  // Load chat history on mount
+  useEffect(() => {
+    const loadChatHistory = async () => {
+      try {
+        const history = await api.getChatHistory(sessionId);
+        if (history.length > 0) {
+          const formattedMessages: Message[] = history.map((msg) => ({
+            id: msg.id,
+            text: msg.content,
+            sender: msg.role === 'user' ? 'user' : 'bot',
+            timestamp: new Date(msg.created_at),
+            emotion: msg.emotion_detected,
+            crisisDetected: msg.crisis_detected,
+          }));
+          setMessages((prev) => [...prev, ...formattedMessages]);
+        }
+      } catch (error) {
+        console.error('Failed to load chat history:', error);
+      }
+    };
+
+    if (api.isAuthenticated()) {
+      loadChatHistory();
+    }
+  }, []);
+
+  const handleSendMessage = async (text: string) => {
+    if (!text.trim() || isLoading) return;
+
+    console.log('[CHAT FRONTEND] Sending message:', {
+      sessionId,
+      inputMessage: text.trim(),
+      length: text.trim().length
+    });
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -62,43 +104,62 @@ export function ChatbotPage({ user, onNavigate }: ChatbotPageProps) {
 
     setMessages((prev) => [...prev, userMessage]);
     setInputValue('');
+    setIsLoading(true);
 
-    // Simulate bot response
-    setTimeout(() => {
-      const botResponse = generateBotResponse(text);
+    try {
+      const response: SendMessageResponse = await api.sendMessage({
+        content: text.trim(),
+        session_id: sessionId,
+      });
+
+      console.log('[CHAT FRONTEND] Received response:', {
+        sessionId: response.session_id,
+        responseLength: response.response.length,
+        emotion: response.emotion_detected,
+        crisis: response.crisis_detected
+      });
+
+      // Update session ID if new
+      if (!sessionId && response.session_id) {
+        setSessionId(response.session_id);
+      }
+
+      // Check for crisis detection
+      if (response.crisis_detected) {
+        setCrisisAlert(
+          'We detected you might be in distress. If this is an emergency, please contact emergency services or your mental health professional immediately.'
+        );
+      }
+
       const botMessage: Message = {
+        id: response.message.id,
+        text: response.response,
+        sender: 'bot',
+        timestamp: new Date(response.message.created_at),
+        emotion: response.emotion_detected,
+        crisisDetected: response.crisis_detected,
+      };
+
+      setMessages((prev) => [...prev, botMessage]);
+    } catch (error) {
+      console.error('Failed to send message:', error);
+      const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
-        text: botResponse,
+        text: 'Sorry, I encountered an error. Please try again.',
         sender: 'bot',
         timestamp: new Date(),
       };
-      setMessages((prev) => [...prev, botMessage]);
-    }, 1000);
-  };
-
-  const generateBotResponse = (userText: string): string => {
-    const lowerText = userText.toLowerCase();
-    
-    if (lowerText.includes('anxious') || lowerText.includes('stress')) {
-      return "I understand you're feeling anxious. Let's work through this together. I recommend a 10-minute breathing exercise (Pranayama) to calm your Vata dosha. Would you like me to guide you through it?";
+      setMessages((prev) => [...prev, errorMessage]);
+    } finally {
+      setIsLoading(false);
     }
-    if (lowerText.includes('yoga')) {
-      return "Based on your current dosha balance, I suggest a gentle Vinyasa flow focusing on grounding poses like Mountain Pose and Tree Pose. This will help balance your energy. Shall I create a personalized sequence for you?";
-    }
-    if (lowerText.includes('eat') || lowerText.includes('food')) {
-      return "For your Pitta constitution, I recommend cooling foods like cucumber, coconut water, and sweet fruits. Avoid spicy and fried foods today. Would you like a detailed meal plan?";
-    }
-    if (lowerText.includes('relax')) {
-      return "Let's focus on relaxation. I recommend practicing Yoga Nidra for 20 minutes, followed by some calming music. Your stress levels will decrease significantly. Should I prepare a relaxation session?";
-    }
-    
-    return "I'm here to help with your wellness journey. I can suggest personalized yoga routines, dietary recommendations, stress management techniques, and mindfulness practices. What would you like to explore?";
   };
 
   const handleVoiceInput = () => {
     if (!isListening) {
       setIsListening(true);
-      // Simulate voice recognition
+      // Note: Real voice recognition would require Web Speech API or similar
+      // For now, we'll keep the simulation but users can implement real voice
       setTimeout(() => {
         const simulatedVoiceText = "I'm feeling stressed and need some guidance";
         setVoiceText(simulatedVoiceText);
@@ -116,7 +177,7 @@ export function ChatbotPage({ user, onNavigate }: ChatbotPageProps) {
 
   return (
     <div className="min-h-screen">
-      <Navigation currentPage="chatbot" onNavigate={onNavigate} user={user} />
+      <Navigation currentPage="chatbot" onNavigate={onNavigate} onLogout={onLogout} user={user} onOpenNotifications={onOpenNotifications} />
 
       <div className="max-w-4xl mx-auto p-4 h-[calc(100vh-80px)] flex flex-col">
         {/* Header */}
@@ -135,11 +196,35 @@ export function ChatbotPage({ user, onNavigate }: ChatbotPageProps) {
               </motion.div>
               <div>
                 <h2>AI Wellness Companion</h2>
-                <p className="text-sm text-purple-100">Powered by Ayurvedic wisdom and modern AI</p>
+                <p className="text-sm text-purple-100">Powered by RAG, Emotion AI, and Ayurvedic wisdom</p>
               </div>
             </div>
           </Card>
         </motion.div>
+
+        {/* Crisis Alert */}
+        {crisisAlert && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-4"
+          >
+            <Alert className="border-red-500 bg-red-50">
+              <AlertTriangle className="h-4 w-4 text-red-600" />
+              <AlertDescription className="text-red-800">
+                {crisisAlert}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="ml-2"
+                  onClick={() => setCrisisAlert(null)}
+                >
+                  Dismiss
+                </Button>
+              </AlertDescription>
+            </Alert>
+          </motion.div>
+        )}
 
         {/* Suggested Responses */}
         <motion.div
@@ -179,20 +264,53 @@ export function ChatbotPage({ user, onNavigate }: ChatbotPageProps) {
                 className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div
-                  className={`max-w-[80%] rounded-2xl px-4 py-3 ${
-                    message.sender === 'user'
-                      ? 'bg-gradient-to-r from-purple-500 to-blue-500 text-white'
-                      : 'bg-white shadow-md text-gray-800'
-                  }`}
+                  className={`max-w-[80%] rounded-2xl px-4 py-3 ${message.sender === 'user'
+                    ? 'bg-gradient-to-r from-purple-500 to-blue-500 text-white'
+                    : `bg-white shadow-md text-gray-800 ${message.crisisDetected ? 'border-2 border-red-500' : ''}`
+                    }`}
                 >
                   <p className="text-sm">{message.text}</p>
-                  <p className={`text-xs mt-1 ${message.sender === 'user' ? 'text-purple-200' : 'text-gray-400'}`}>
-                    {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </p>
+                  <div className="flex items-center justify-between mt-1">
+                    <p className={`text-xs ${message.sender === 'user' ? 'text-purple-200' : 'text-gray-400'}`}>
+                      {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                    {message.emotion && (
+                      <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full ml-2">
+                        {message.emotion}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </motion.div>
             ))}
           </AnimatePresence>
+          {isLoading && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="flex justify-start"
+            >
+              <div className="bg-white shadow-md rounded-2xl px-4 py-3">
+                <div className="flex gap-2">
+                  <motion.div
+                    animate={{ scale: [1, 1.2, 1] }}
+                    transition={{ duration: 0.6, repeat: Infinity, delay: 0 }}
+                    className="w-2 h-2 bg-purple-500 rounded-full"
+                  />
+                  <motion.div
+                    animate={{ scale: [1, 1.2, 1] }}
+                    transition={{ duration: 0.6, repeat: Infinity, delay: 0.2 }}
+                    className="w-2 h-2 bg-purple-500 rounded-full"
+                  />
+                  <motion.div
+                    animate={{ scale: [1, 1.2, 1] }}
+                    transition={{ duration: 0.6, repeat: Infinity, delay: 0.4 }}
+                    className="w-2 h-2 bg-purple-500 rounded-full"
+                  />
+                </div>
+              </div>
+            </motion.div>
+          )}
           <div ref={messagesEndRef} />
         </div>
 
@@ -220,14 +338,14 @@ export function ChatbotPage({ user, onNavigate }: ChatbotPageProps) {
             </Button>
             <Button
               onClick={() => handleSendMessage(inputValue)}
-              disabled={!inputValue.trim()}
+              disabled={!inputValue.trim() || isLoading}
               size="icon"
               className="bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600"
             >
               <Send className="w-4 h-4" />
             </Button>
           </div>
-          
+
           {isListening && (
             <motion.div
               initial={{ opacity: 0 }}

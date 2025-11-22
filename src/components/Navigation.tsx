@@ -1,23 +1,48 @@
 import { motion } from 'motion/react';
-import { Home, MessageCircle, FileText, Activity, UtensilsCrossed, TrendingUp, LogOut } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Home, MessageCircle, FileText, Activity, UtensilsCrossed, TrendingUp, LogOut, Sparkles, Watch, Bell, User as UserIconLucide, Settings } from 'lucide-react';
 import { Button } from './ui/button';
+import { Badge } from './ui/badge';
 import type { PageType, User } from '../App';
 import logo from 'figma:asset/34629939463a62914e4d6cf8617751092b770df0.png';
+import api from '../services/api';
 
 interface NavigationProps {
   currentPage: PageType;
   onNavigate: (page: PageType) => void;
   onLogout?: () => void;
   user?: User | null;
+  onOpenNotifications?: () => void;
 }
 
-export function Navigation({ currentPage, onNavigate, onLogout, user }: NavigationProps) {
+export function Navigation({ currentPage, onNavigate, onLogout, user, onOpenNotifications }: NavigationProps) {
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (user) {
+      loadUnreadCount();
+      const interval = setInterval(loadUnreadCount, 30000); // Poll every 30s
+      return () => clearInterval(interval);
+    }
+  }, [user]);
+
+  const loadUnreadCount = async () => {
+    try {
+      const count = await api.getUnreadCount();
+      setUnreadCount(count || 0);
+    } catch (err) {
+      console.error('Failed to load unread count:', err);
+    }
+  };
+
   const navItems = [
     { id: 'dashboard' as PageType, icon: Home, label: 'Dashboard' },
     { id: 'chatbot' as PageType, icon: MessageCircle, label: 'Chat' },
     { id: 'manual' as PageType, icon: FileText, label: 'Log' },
+    { id: 'aura' as PageType, icon: Sparkles, label: 'Aura' },
     { id: 'yoga' as PageType, icon: Activity, label: 'Yoga' },
     { id: 'diet' as PageType, icon: UtensilsCrossed, label: 'Diet' },
+    { id: 'device' as PageType, icon: Watch, label: 'Device' },
     { id: 'progress' as PageType, icon: TrendingUp, label: 'Progress' },
   ];
 
@@ -40,7 +65,7 @@ export function Navigation({ currentPage, onNavigate, onLogout, user }: Navigati
             </motion.div>
             <div>
               <h2 className="text-purple-700">Nirvami</h2>
-              {user && <p className="text-xs text-gray-500">Welcome, {user.name}</p>}
+              {user?.name && <p className="text-xs text-gray-500">Welcome, {user.name}</p>}
             </div>
           </div>
 
@@ -67,14 +92,57 @@ export function Navigation({ currentPage, onNavigate, onLogout, user }: Navigati
             })}
 
             {onLogout && (
-              <Button
-                onClick={onLogout}
-                variant="ghost"
-                size="sm"
-                className="ml-4"
-              >
-                <LogOut className="w-4 h-4" />
-              </Button>
+              <div className="flex items-center gap-3 ml-4 pl-4 border-l border-gray-200">
+                {/* Notification Bell */}
+                <motion.button
+                  onClick={onOpenNotifications}
+                  className="relative p-2 rounded-lg text-gray-600 hover:bg-purple-50 hover:text-purple-700 transition-colors"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <Bell className="w-5 h-5" />
+                  {unreadCount > 0 && (
+                    <Badge
+                      variant="destructive"
+                      className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
+                    >
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </Badge>
+                  )}
+                </motion.button>
+
+                {/* Profile Button */}
+                <motion.button
+                  onClick={() => onNavigate('profile')}
+                  className={`p-2 rounded-lg transition-colors ${
+                    currentPage === 'profile'
+                      ? 'bg-purple-100 text-purple-700'
+                      : 'text-gray-600 hover:bg-purple-50 hover:text-purple-700'
+                  }`}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <Settings className="w-5 h-5" />
+                </motion.button>
+
+                {user?.name && (
+                  <div className="hidden lg:flex items-center gap-2">
+                    <div className="w-8 h-8 bg-gradient-to-br from-purple-400 to-pink-400 rounded-full flex items-center justify-center text-white font-semibold text-sm">
+                      {user.name.charAt(0).toUpperCase()}
+                    </div>
+                    <span className="text-sm text-gray-700">{user.name}</span>
+                  </div>
+                )}
+                <Button
+                  onClick={onLogout}
+                  variant="ghost"
+                  size="sm"
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50 flex items-center gap-2"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span className="text-sm font-medium">Sign Out</span>
+                </Button>
+              </div>
             )}
           </div>
         </div>
