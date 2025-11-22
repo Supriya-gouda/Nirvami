@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Send, Mic, MicOff, Sparkles, AlertTriangle } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { Navigation } from './Navigation';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -269,7 +271,20 @@ export function ChatbotPage({ user, onNavigate, onLogout, onOpenNotifications }:
                     : `bg-white shadow-md text-gray-800 ${message.crisisDetected ? 'border-2 border-red-500' : ''}`
                     }`}
                 >
-                  <p className="text-sm">{message.text}</p>
+                  <div className="text-sm prose prose-sm max-w-none prose-p:my-1 prose-ul:my-1 prose-li:my-0 dark:prose-invert">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        p: ({ node, ...props }) => <p className="mb-2 last:mb-0" {...props} />,
+                        ul: ({ node, ...props }) => <ul className="list-disc ml-4 mb-2" {...props} />,
+                        ol: ({ node, ...props }) => <ol className="list-decimal ml-4 mb-2" {...props} />,
+                        li: ({ node, ...props }) => <li className="mb-1" {...props} />,
+                        strong: ({ node, ...props }) => <span className="font-bold text-purple-700 dark:text-purple-300" {...props} />,
+                      }}
+                    >
+                      {message.text}
+                    </ReactMarkdown>
+                  </div>
                   <div className="flex items-center justify-between mt-1">
                     <p className={`text-xs ${message.sender === 'user' ? 'text-purple-200' : 'text-gray-400'}`}>
                       {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
