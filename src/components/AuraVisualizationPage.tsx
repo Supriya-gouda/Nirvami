@@ -49,10 +49,10 @@ export function AuraVisualizationPage({ user, onNavigate, onLogout, onOpenNotifi
           id: '1',
           user_id: 'test',
           date: new Date().toISOString().split('T')[0],
-          color: 'blue',
-          intensity: 75,
-          glow_level: 80,
-          aura_type: 'calm',
+          color: 'grey',
+          intensity: 50,
+          glow_level: 50,
+          aura_type: 'balanced',
           emotion_basis: {},
           created_at: new Date().toISOString()
         });
@@ -62,107 +62,133 @@ export function AuraVisualizationPage({ user, onNavigate, onLogout, onOpenNotifi
     };
 
     loadAura();
+
+    // Auto-refresh every 10 seconds to catch updates
+    const interval = setInterval(loadAura, 10000);
+    return () => clearInterval(interval);
   }, []);
 
   const auraColors: Record<string, AuraColor> = {
     red: {
       name: 'Red',
-      color: '#FF5757',
+      color: '#E53935',
       gradient: 'from-red-400 via-red-500 to-red-600',
       innerGlow: 'from-red-500 to-red-700',
-      meaning: 'Passion & Energy',
-      traits: ['Energetic', 'Strong-willed', 'Passionate', 'Courageous'],
+      meaning: 'Energy & Courage',
+      traits: ['Energetic', 'Courageous', 'Grounding', 'Motivated'],
       icon: Flame,
       chakra: 'Root Chakra',
       element: 'Fire'
     },
     orange: {
       name: 'Orange',
-      color: '#FF8C42',
+      color: '#FB8C00',
       gradient: 'from-orange-400 via-orange-500 to-orange-600',
       innerGlow: 'from-orange-500 to-orange-700',
-      meaning: 'Creativity & Joy',
-      traits: ['Creative', 'Adventurous', 'Confident', 'Enthusiastic'],
+      meaning: 'Joy & Playfulness',
+      traits: ['Joyful', 'Playful', 'Creative', 'Social'],
       icon: Sparkles,
       chakra: 'Sacral Chakra',
       element: 'Fire'
     },
     yellow: {
       name: 'Yellow',
-      color: '#FFD93D',
+      color: '#FDD835',
       gradient: 'from-yellow-300 via-yellow-400 to-yellow-500',
       innerGlow: 'from-yellow-400 to-yellow-600',
-      meaning: 'Optimism & Intellect',
-      traits: ['Optimistic', 'Intelligent', 'Playful', 'Inspiring'],
+      meaning: 'Optimism & Clarity',
+      traits: ['Optimistic', 'Clear-minded', 'Confident', 'Bright'],
       icon: Zap,
       chakra: 'Solar Plexus',
       element: 'Fire'
     },
     green: {
       name: 'Green',
-      color: '#6BCF7F',
+      color: '#66BB6A',
       gradient: 'from-green-400 via-green-500 to-green-600',
       innerGlow: 'from-green-500 to-green-700',
-      meaning: 'Growth & Healing',
-      traits: ['Balanced', 'Healing', 'Growth-oriented', 'Compassionate'],
+      meaning: 'Balance & Healing',
+      traits: ['Balanced', 'Healing', 'Compassionate', 'Growing'],
       icon: Leaf,
       chakra: 'Heart Chakra',
       element: 'Earth'
     },
     blue: {
       name: 'Blue',
-      color: '#5DADE2',
+      color: '#42A5F5',
       gradient: 'from-blue-400 via-blue-500 to-blue-600',
       innerGlow: 'from-blue-500 to-blue-700',
       meaning: 'Calm & Communication',
-      traits: ['Calm', 'Communicative', 'Trustworthy', 'Intuitive'],
+      traits: ['Calm', 'Communicative', 'Trustworthy', 'Peaceful'],
       icon: Droplet,
       chakra: 'Throat Chakra',
       element: 'Water'
     },
+    teal: {
+      name: 'Teal',
+      color: '#26A69A',
+      gradient: 'from-teal-400 via-teal-500 to-teal-600',
+      innerGlow: 'from-teal-500 to-teal-700',
+      meaning: 'Emotional Healing',
+      traits: ['Healing', 'Safe', 'Vulnerable', 'Processing'],
+      icon: Heart,
+      chakra: 'Heart-Throat Bridge',
+      element: 'Water'
+    },
     indigo: {
       name: 'Indigo',
-      color: '#6C5CE7',
+      color: '#1A237E',
       gradient: 'from-indigo-400 via-indigo-500 to-indigo-600',
       innerGlow: 'from-indigo-500 to-indigo-700',
-      meaning: 'Intuition & Insight',
-      traits: ['Intuitive', 'Wise', 'Perceptive', 'Spiritual'],
+      meaning: 'Depth & Protection',
+      traits: ['Deep', 'Protected', 'Contained', 'Reflective'],
       icon: Brain,
       chakra: 'Third Eye',
       element: 'Light'
     },
     violet: {
       name: 'Violet',
-      color: '#A29BFE',
+      color: '#8E24AA',
       gradient: 'from-violet-400 via-violet-500 to-violet-600',
       innerGlow: 'from-violet-500 to-violet-700',
-      meaning: 'Spirituality & Magic',
-      traits: ['Spiritual', 'Magical', 'Visionary', 'Transformative'],
+      meaning: 'Insight & Transformation',
+      traits: ['Insightful', 'Intuitive', 'Transformative', 'Spiritual'],
       icon: Sparkles,
       chakra: 'Crown Chakra',
       element: 'Ether'
     },
     pink: {
       name: 'Pink',
-      color: '#FDA7DF',
+      color: '#EC407A',
       gradient: 'from-pink-400 via-pink-500 to-pink-600',
       innerGlow: 'from-pink-500 to-pink-700',
-      meaning: 'Love & Tenderness',
-      traits: ['Loving', 'Tender', 'Romantic', 'Nurturing'],
+      meaning: 'Self-Love & Gentleness',
+      traits: ['Loving', 'Gentle', 'Compassionate', 'Nurturing'],
       icon: Heart,
       chakra: 'Heart Chakra',
       element: 'Water'
     },
     white: {
       name: 'White',
-      color: '#F8F9FA',
+      color: '#F5F5F5',
       gradient: 'from-gray-100 via-white to-gray-200',
       innerGlow: 'from-gray-200 to-gray-400',
-      meaning: 'Purity & Truth',
-      traits: ['Pure', 'Truthful', 'Spiritual', 'Enlightened'],
+      meaning: 'Clarity & Reset',
+      traits: ['Clear', 'Spacious', 'Reset', 'Open'],
       icon: Sparkles,
       chakra: 'All Chakras',
       element: 'Light'
+    },
+    grey: {
+      name: 'Grey',
+      color: '#9E9E9E',
+      gradient: 'from-gray-400 via-gray-500 to-gray-600',
+      innerGlow: 'from-gray-500 to-gray-700',
+      meaning: 'Neutral & Balanced',
+      traits: ['Neutral', 'Balanced', 'Calm', 'Stillness'],
+      icon: Wind,
+      chakra: 'All Chakras',
+      element: 'Earth'
     },
     silver: {
       name: 'Silver',
@@ -227,7 +253,7 @@ export function AuraVisualizationPage({ user, onNavigate, onLogout, onOpenNotifi
                     <div className="absolute inset-0 flex items-center justify-center">
                       <Icon className="w-32 h-32 text-white opacity-90" />
                     </div>
-                    
+
                     {/* Pulsing rings */}
                     <motion.div
                       className="absolute inset-0 rounded-full border-4 border-white opacity-30"
@@ -246,7 +272,7 @@ export function AuraVisualizationPage({ user, onNavigate, onLogout, onOpenNotifi
                 <div className="flex-1 text-center md:text-left">
                   <h2 className="text-4xl font-bold mb-2">{currentAuraColor.name} Aura</h2>
                   <p className="text-2xl mb-4 opacity-90">{currentAuraColor.meaning}</p>
-                  
+
                   <div className="grid grid-cols-2 gap-4 mb-6">
                     <div className="bg-white/20 backdrop-blur-sm rounded-lg p-4">
                       <p className="text-sm opacity-80 mb-1">Intensity</p>

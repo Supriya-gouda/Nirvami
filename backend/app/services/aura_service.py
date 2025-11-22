@@ -10,20 +10,123 @@ logger = logging.getLogger(__name__)
 class AuraService:
     """Service for generating and managing aura visualizations."""
     
-    # Emotion to color mapping
-    EMOTION_COLORS = {
-        "joy": {"code": "#FFD700", "name": "yellow"},  # Gold
-        "happiness": {"code": "#FFD700", "name": "yellow"},
-        "love": {"code": "#FF69B4", "name": "pink"},  # Hot Pink
-        "excitement": {"code": "#FF6347", "name": "orange"},  # Tomato
-        "calm": {"code": "#87CEEB", "name": "blue"},  # Sky Blue
-        "sadness": {"code": "#4169E1", "name": "blue"},  # Royal Blue
-        "anger": {"code": "#DC143C", "name": "red"},  # Crimson
-        "fear": {"code": "#9370DB", "name": "purple"},  # Medium Purple
-        "anxiety": {"code": "#8B008B", "name": "purple"},  # Dark Magenta
-        "disgust": {"code": "#556B2F", "name": "green"},  # Dark Olive Green
-        "surprise": {"code": "#FF8C00", "name": "orange"},  # Dark Orange
-        "neutral": {"code": "#D3D3D3", "name": "purple"},  # Light Gray -> purple for default
+    # Color Therapy Palette (Mental Health + Ayurveda)
+    COLOR_THERAPY_PALETTE = {
+        "red": {
+            "hex": "#E53935",
+            "name": "red",
+            "keywords": ["energy", "courage", "grounding"],
+            "supports": ["lethargy", "lack_of_motivation", "feeling_stuck"],
+            "avoid_when": ["high_anxiety", "anger_outburst"],
+            "chakra": "root",
+            "element": "Fire"
+        },
+        "orange": {
+            "hex": "#FB8C00",
+            "name": "orange",
+            "keywords": ["joy", "playfulness", "connection"],
+            "supports": ["social_isolation", "low_fun", "creative_block"],
+            "avoid_when": ["sensory_overload"],
+            "chakra": "sacral",
+            "element": "Fire"
+        },
+        "yellow": {
+            "hex": "#FDD835",
+            "name": "yellow",
+            "keywords": ["optimism", "clarity", "confidence"],
+            "supports": ["low_mood", "brain_fog"],
+            "avoid_when": ["panic", "migraine"],
+            "chakra": "solar_plexus",
+            "element": "Fire"
+        },
+        "green": {
+            "hex": "#66BB6A",
+            "name": "green",
+            "keywords": ["balance", "healing", "compassion"],
+            "supports": ["burnout_recovery", "emotional_healing"],
+            "avoid_when": [],
+            "chakra": "heart",
+            "element": "Earth"
+        },
+        "blue": {
+            "hex": "#42A5F5",
+            "name": "blue",
+            "keywords": ["calm", "trust", "communication"],
+            "supports": ["stress", "overthinking"],
+            "avoid_when": ["emotional_numbness"],
+            "chakra": "throat",
+            "element": "Water"
+        },
+        "teal": {
+            "hex": "#26A69A",
+            "name": "teal",
+            "keywords": ["emotional_healing", "safety"],
+            "supports": ["vulnerability", "processing_feelings"],
+            "avoid_when": [],
+            "chakra": "heart_throat_bridge",
+            "element": "Water"
+        },
+        "violet": {
+            "hex": "#8E24AA",
+            "name": "violet",
+            "keywords": ["insight", "intuition", "transformation"],
+            "supports": ["big_questions", "meaning_search"],
+            "avoid_when": ["disconnected_from_body"],
+            "chakra": "third_eye_crown",
+            "element": "Ether"
+        },
+        "pink": {
+            "hex": "#EC407A",
+            "name": "pink",
+            "keywords": ["self_love", "gentleness"],
+            "supports": ["self_criticism", "shame", "loneliness"],
+            "avoid_when": [],
+            "chakra": "heart",
+            "element": "Water"
+        },
+        "white": {
+            "hex": "#F5F5F5",
+            "name": "white",
+            "keywords": ["space", "clarity", "reset"],
+            "supports": ["overload", "cluttered_mind"],
+            "avoid_when": [],
+            "chakra": "all",
+            "element": "Light"
+        },
+        "grey": {
+            "hex": "#9E9E9E",
+            "name": "grey",
+            "keywords": ["neutral", "balance", "stillness"],
+            "supports": ["no_data", "baseline"],
+            "avoid_when": [],
+            "chakra": "all",
+            "element": "Earth"
+        },
+        "indigo": {
+            "hex": "#1A237E",
+            "name": "indigo",
+            "keywords": ["depth", "protection", "containment"],
+            "supports": ["heavy_emotions", "deep_reflection"],
+            "avoid_when": ["severe_depression"],
+            "chakra": "third_eye",
+            "element": "Light"
+        }
+    }
+    
+    # Emotion to Color Mapping (based on therapeutic principles)
+    EMOTION_TO_COLOR = {
+        "joy": "orange",
+        "happiness": "yellow",
+        "love": "pink",
+        "excitement": "orange",
+        "calm": "teal",
+        "sadness": "blue",
+        "anger": "red",
+        "fear": "indigo",
+        "anxiety": "violet",
+        "disgust": "green",
+        "surprise": "orange",
+        "neutral": "grey"
     }
     
     AURA_TYPES = {
@@ -143,13 +246,19 @@ class AuraService:
             return await self._create_neutral_aura(user_id, target_date)
     
     def _compute_aura_color(self, emotion_dist: Dict[str, float], dominant: str) -> Dict[str, str]:
-        """Compute aura color from emotion distribution."""
-        # Get color for dominant emotion
-        color_info = self.EMOTION_COLORS.get(dominant.lower(), {"code": "#D3D3D3", "name": "purple"})
+        """Compute aura color from emotion distribution using color therapy principles."""
+        # Get base color from dominant emotion
+        color_name = self.EMOTION_TO_COLOR.get(dominant.lower(), "grey")
+        color_data = self.COLOR_THERAPY_PALETTE.get(color_name)
         
-        # For now, return base color
-        # Could implement color blending for mixed emotions
-        return color_info
+        if not color_data:
+            # Fallback to grey
+            color_data = self.COLOR_THERAPY_PALETTE["grey"]
+        
+        return {
+            "name": color_data["name"],
+            "code": color_data["hex"]
+        }
     
     def _compute_intensity(self, emotion_dist: Dict[str, float]) -> float:
         """Compute aura intensity (0-100)."""
@@ -186,12 +295,13 @@ class AuraService:
     
     async def _create_neutral_aura(self, user_id: str, target_date: date) -> Dict:
         """Create a neutral aura entry."""
+        grey_color = self.COLOR_THERAPY_PALETTE["grey"]
         aura_data = {
             "id": str(uuid.uuid4()),
             "user_id": user_id,
             "date": target_date.isoformat(),
-            "color": "purple",
-            "color_code": "#D3D3D3",
+            "color": grey_color["name"],
+            "color_code": grey_color["hex"],
             "intensity": 50.0,
             "glow_level": 50.0,
             "aura_type": "balanced",

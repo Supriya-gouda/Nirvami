@@ -91,7 +91,9 @@ async def get_emotion_logs(
         return result.data
     except Exception as e:
         logger.error(f"Error fetching emotion logs: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to fetch emotion logs: {str(e)}")
+        # Return empty array instead of crashing
+        return []
+
 
 
 @router.get("/aggregates", response_model=List[EmotionAggregate])

@@ -372,3 +372,9 @@ async def get_current_user_info(current_user: dict = Depends(get_current_user)):
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User profile not found"
         )
+
+
+@router.get("/user")
+async def get_user(current_user: dict = Depends(get_current_user)):
+    """Get current user information (alias for /me)."""
+    return await get_current_user_info(current_user)

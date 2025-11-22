@@ -156,39 +156,9 @@ def calculate_wellness_score(user_id: str, target_date: date, supabase) -> Dict:
             "wearable_score": 50.0,
             "engagement_score": 50.0,
             "score_components": {"emotion": 50.0, "wearable": 50.0, "engagement": 50.0},
-            "insights": ["Unable to calculate detailed wellness score"],
-            "recommendations": ["Continue logging your emotions and activities"]
+            "insights": ["Wellness data not available"],
+            "recommendations": ["Continue using the app to track your wellness"]
         }
-
-
-@router.get("/today")
-async def get_today_wellness_score(
-    current_user_id: str = Depends(get_current_user_id)
-):
-    """Get today's wellness score."""
-    try:
-        supabase = get_supabase()
-        target_date = date.today()
-        
-        # Try to get existing score from database
-        result = supabase.table("wellness_scores").select("*").eq(
-            "user_id", current_user_id
-        ).eq("date", target_date.isoformat()).execute()
-        
-        if result.data and len(result.data) > 0:
-            return result.data[0]
-        
-        # Calculate and store new score
-        wellness_data = calculate_wellness_score(current_user_id, target_date, supabase)
-        
-        # Insert into database
-        insert_result = supabase.table("wellness_scores").upsert(wellness_data).execute()
-        
-        return insert_result.data[0] if insert_result.data else wellness_data
-        
-    except Exception as e:
-        logger.error(f"Error fetching wellness score: {e}")
-        raise
 
 
 @router.get("/history", response_model=List[WellnessScore])

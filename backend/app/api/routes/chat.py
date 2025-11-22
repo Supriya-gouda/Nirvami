@@ -112,9 +112,23 @@ async def send_message(
         except Exception as history_error:
             logger.warning(f"Could not load chat history: {history_error}")
         
-        # Detect emotion from user message
-        emotion_data = emotion_service.detect_emotion(message_req.content)
-        logger.info(f"Detected emotion: {emotion_data['emotion_type']} (confidence: {emotion_data['confidence']:.2f})")
+        # Contextual Emotion Detection
+        # 1. Get recent user messages for context
+        recent_user_msgs = [msg["content"] for msg in chat_history if msg["role"] == "user"][-5:]
+        recent_user_msgs.append(message_req.content)
+        
+        # 2. Detect emotion from the sequence
+        # Skip if message is too short (noise reduction)
+        if len(message_req.content) < 5 and len(recent_user_msgs) == 1:
+             emotion_data = {
+                'emotion_type': 'neutral',
+                'confidence': 0.5,
+                'all_scores': {'neutral': 1.0}
+            }
+        else:
+            emotion_data = emotion_service.detect_contextual_emotion(recent_user_msgs)
+            
+        logger.info(f"Detected emotion (contextual): {emotion_data['emotion_type']} (confidence: {emotion_data['confidence']:.2f})")
         
         # Check for crisis
         is_crisis, severity, triggers = CrisisDetector.detect_crisis(
@@ -168,12 +182,18 @@ async def send_message(
                 emotion_type=emotion_data['emotion_type'],
                 confidence=emotion_data['confidence'],
                 all_scores=emotion_data['all_scores'],
-                source='text',
+                source='chat_context',
                 message_id=user_message_id
             )
             supabase.table("emotion_logs").insert(emotion_log).execute()
+            
+            # Update Aura immediately based on this new emotion
+            from app.services.aura_service import AuraService
+            aura_service = AuraService(supabase)
+            await aura_service.generate_daily_aura(current_user_id, datetime.utcnow().date())
+            
         except Exception as db_msg_err:
-            logger.error(f"Failed to save user message to DB: {db_msg_err}")
+            logger.error(f"Failed to save user message/aura to DB: {db_msg_err}")
         
         # Handle crisis if detected
         if is_crisis:

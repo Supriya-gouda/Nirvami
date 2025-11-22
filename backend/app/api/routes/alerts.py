@@ -49,3 +49,21 @@ async def get_notifications(
     except Exception as e:
         logger.error(f"Error fetching notifications: {e}")
         raise
+
+
+@router.get("/unread-count")
+async def get_unread_count(
+    current_user_id: str = Depends(get_current_user_id)
+):
+    """Get count of unread notifications."""
+    supabase = get_supabase()
+    
+    try:
+        result = supabase.table("notifications").select("id", count="exact").eq(
+            "user_id", current_user_id
+        ).eq("read", False).execute()
+        
+        return {"count": result.count or 0}
+    except Exception as e:
+        logger.error(f"Error fetching unread count: {e}")
+        return {"count": 0}

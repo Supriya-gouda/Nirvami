@@ -57,6 +57,29 @@ class EmotionService:
             logger.error(f"ML emotion detection failed: {e}")
             return self._detect_with_rules(text)
     
+    def detect_contextual_emotion(self, texts: List[str]) -> Dict:
+        """
+        Detect emotion from a sequence of texts (contextual analysis).
+        
+        Args:
+            texts: List of text messages to analyze together
+            
+        Returns:
+            Dict with emotion_type, confidence, and all_scores
+        """
+        if not texts:
+            return {
+                'emotion_type': 'neutral',
+                'confidence': 0.5,
+                'all_scores': {'neutral': 1.0}
+            }
+            
+        # Combine texts to analyze the flow
+        # We give more weight to recent messages by repeating them
+        combined_text = " ".join(texts[:-1] + [texts[-1]] * 2)
+        
+        return self.detect_emotion(combined_text)
+
     def _detect_with_rules(self, text: str) -> Dict:
         """Rule-based emotion detection as fallback."""
         text_lower = text.lower()
