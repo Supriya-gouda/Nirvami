@@ -24,6 +24,7 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { AuraHistory } from './AuraHistory';
 import api from '../services/api';
 import type { PageType } from '../App';
 import type { WellnessScore, AuraEntry, DoshaAssessment, EmotionLog, User } from '../types/api.types';
@@ -33,9 +34,10 @@ interface DashboardProps {
   onNavigate: (page: PageType) => void;
   onLogout?: () => void;
   onOpenNotifications?: () => void;
+  onRequestMoodPopup?: () => void;
 }
 
-export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications }: DashboardProps) {
+export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications, onRequestMoodPopup }: DashboardProps) {
   // UI State
   const [showNotification, setShowNotification] = useState(false);
   const [showStreakCalendar, setShowStreakCalendar] = useState(false);
@@ -48,60 +50,14 @@ export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications }: D
   const [auraData, setAuraData] = useState<AuraEntry | null>(null);
   const [doshaData, setDoshaData] = useState<DoshaAssessment | null>(null);
   const [recentEmotions, setRecentEmotions] = useState<EmotionLog[]>([]);
+  const [wearableSummary, setWearableSummary] = useState<any>({ steps: 0, sleep_hours: 0, avg_heart_rate: 0, avg_stress_level: 0 });
   const [loading, setLoading] = useState(true);
   const [mentalState, setMentalState] = useState<string>('balanced');
   const [generatingAura, setGeneratingAura] = useState(false);
 
-  // Local State (fallback for streak tracking)
-  const [streak, setStreak] = useState<number>(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayStr = today.toISOString().split('T')[0];
-
-    const lastVisitStr = localStorage.getItem('nirvami_last_visit_date');
-    const currentStreak = parseInt(localStorage.getItem('nirvami_streak') || '0', 10);
-
-    const visitDatesStr = localStorage.getItem('nirvami_visit_dates');
-    let visitDates = [];
-    try {
-      visitDates = visitDatesStr && visitDatesStr !== 'undefined' ? JSON.parse(visitDatesStr) : [];
-    } catch (e) {
-      console.error('Failed to parse visit dates:', e);
-      visitDates = [];
-    }
-
-    if (!visitDates.includes(todayStr)) {
-      visitDates.push(todayStr);
-      localStorage.setItem('nirvami_visit_dates', JSON.stringify(visitDates));
-    }
-
-    if (!lastVisitStr) {
-      localStorage.setItem('nirvami_last_visit_date', todayStr);
-      localStorage.setItem('nirvami_streak', '1');
-      return 1;
-    }
-
-    const lastVisit = new Date(lastVisitStr);
-    lastVisit.setHours(0, 0, 0, 0);
-
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-
-    if (lastVisitStr === todayStr) {
-      return currentStreak;
-    }
-
-    if (lastVisit.getTime() === yesterday.getTime()) {
-      const newStreak = currentStreak + 1;
-      localStorage.setItem('nirvami_last_visit_date', todayStr);
-      localStorage.setItem('nirvami_streak', newStreak.toString());
-      return newStreak;
-    }
-
-    localStorage.setItem('nirvami_last_visit_date', todayStr);
-    localStorage.setItem('nirvami_streak', '1');
-    return 1;
-  });
+  // Local State
+  const [streak, setStreak] = useState<number>(0);
+  const [longestStreak, setLongestStreak] = useState<number>(0);
 
   // Fetch dashboard data on mount
   useEffect(() => {
@@ -114,8 +70,8 @@ export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications }: D
       try {
         setLoading(true);
 
-        // Fetch all data in parallel
-        const [wellness, aura, dosha, emotions] = await Promise.all([
+        // Fetch all data in parallel including streak
+        const [wellness, aura, dosha, emotions, streakData, wearable] = await Promise.all([
           api.getTodayWellness().catch(() => null),
           api.getTodayAura().catch(() => null),
           api.getLatestDosha().catch(() => null),
@@ -123,12 +79,20 @@ export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications }: D
             start_date: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0],
             end_date: new Date().toISOString().split('T')[0]
           }).catch(() => []),
+          api.recordVisit().catch(() => ({ current_streak: 0, longest_streak: 0 })),
+          api.getLatestWearableData().catch((err) => {
+            console.error('Error fetching wearable data:', err);
+            return { hasData: false, steps: 0, sleepHours: 0, heartRate: 0, stressLevel: 0 };
+          }),
         ]);
 
         setWellnessData(wellness);
         setAuraData(aura);
         setDoshaData(dosha);
         setRecentEmotions(emotions);
+        setWearableSummary(wearable || { hasData: false, steps: 0, sleepHours: 0, heartRate: 0, stressLevel: 0 });
+        setStreak(streakData?.current_streak || 0);
+        setLongestStreak(streakData?.longest_streak || 0);
       } catch (error) {
         console.error('Failed to fetch dashboard data:', error);
       } finally {
@@ -137,6 +101,14 @@ export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications }: D
     };
 
     fetchDashboardData();
+    
+    // Request mood popup on first mount
+    if (onRequestMoodPopup) {
+      console.log('[Dashboard] Requesting mood popup on mount');
+      setTimeout(() => {
+        onRequestMoodPopup();
+      }, 1000);
+    }
   }, []);
 
   // Handle mental state change and regenerate aura
@@ -157,13 +129,8 @@ export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications }: D
 
   // Get visited dates for calendar
   const getVisitedDates = (): string[] => {
-    const visitDatesStr = localStorage.getItem('nirvami_visit_dates');
-    try {
-      return visitDatesStr && visitDatesStr !== 'undefined' ? JSON.parse(visitDatesStr) : [];
-    } catch (e) {
-      console.error('Failed to parse visit dates:', e);
-      return [];
-    }
+    // TODO: Fetch visit dates from backend user_preferences.streak_data.visit_dates
+    return [];
   };
 
   const isDateVisited = (dateStr: string): boolean => {
@@ -220,6 +187,14 @@ export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications }: D
       gradient: 'from-indigo-400 to-blue-400',
       bgGradient: 'from-indigo-50 to-blue-50',
       description: 'AI posture check'
+    },
+    {
+      id: 'emotion-history' as PageType,
+      icon: TrendingUp,
+      label: 'Emotion Timeline',
+      gradient: 'from-purple-400 to-indigo-400',
+      bgGradient: 'from-purple-50 to-indigo-50',
+      description: 'Track emotions'
     },
     {
       id: 'diet' as PageType,
@@ -453,6 +428,127 @@ export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications }: D
             </p>
           </motion.div>
         </div>
+
+        {/* Body & Energy Card */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="mb-6"
+        >
+          <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-white/50">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl">
+                  <Activity className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800">Body & Energy</h3>
+                  <p className="text-sm text-gray-600">
+                    {wearableSummary?.hasData ? "Today's health snapshot" : "No data yet - add health data"}
+                  </p>
+                </div>
+              </div>
+              {wearableSummary?.inferred_emotion && (
+                <Badge variant={wearableSummary.inferred_emotion === 'Physically Stressed' ? 'destructive' : 'default'}>
+                  {wearableSummary.inferred_emotion}
+                </Badge>
+              )}
+            </div>
+
+            {wearableSummary?.hasData ? (
+              <>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                  {/* Sleep */}
+                  {wearableSummary?.sleepHours !== null && wearableSummary?.sleepHours !== undefined && (
+                    <div className="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-xl p-4">
+                      <p className="text-xs text-gray-600 mb-1">Sleep</p>
+                      <p className="text-2xl font-bold text-gray-800">{wearableSummary?.sleepHours?.toFixed(1) || '0'} hrs</p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {(wearableSummary?.sleepHours || 0) < 6 ? '😴 Low' : (wearableSummary?.sleepHours || 0) >= 8 ? '✨ Great' : '👍 Good'}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Heart Rate */}
+                  {wearableSummary?.heartRate !== null && wearableSummary?.heartRate !== undefined && (
+                    <div className="bg-gradient-to-br from-pink-50 to-rose-50 rounded-xl p-4">
+                      <p className="text-xs text-gray-600 mb-1">Heart Rate</p>
+                      <p className="text-2xl font-bold text-gray-800">{Math.round(wearableSummary?.heartRate || 0)} bpm</p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {(wearableSummary?.heartRate || 0) > 90 ? '⚡ Elevated' : (wearableSummary?.heartRate || 0) < 60 ? '🧘 Calm' : '❤️ Normal'}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Steps */}
+                  {wearableSummary?.steps !== null && wearableSummary?.steps !== undefined && (
+                    <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl p-4">
+                      <p className="text-xs text-gray-600 mb-1">Steps</p>
+                      <p className="text-2xl font-bold text-gray-800">{wearableSummary?.steps?.toLocaleString() || '0'}</p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {(wearableSummary?.steps || 0) >= 8000 ? '🏃 Active' : (wearableSummary?.steps || 0) >= 5000 ? '🚶 Moderate' : '💤 Light'}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Stress Level */}
+                  {wearableSummary?.stressLevel !== null && wearableSummary?.stressLevel !== undefined && (
+                    <div className="bg-gradient-to-br from-purple-50 to-violet-50 rounded-xl p-4">
+                      <p className="text-xs text-gray-600 mb-1">Stress</p>
+                      <p className="text-2xl font-bold text-gray-800">{wearableSummary?.stressLevel || 0}/10</p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {(wearableSummary?.stressLevel || 0) >= 7 ? '😰 High' : (wearableSummary?.stressLevel || 0) >= 4 ? '😐 Moderate' : '😌 Low'}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+              {/* Quick Recommendations */}
+              {(wearableSummary.food_recommendations?.length > 0 || wearableSummary.yoga_recommendations?.length > 0) && (
+                <div className="space-y-3">
+                  <p className="text-sm font-medium text-gray-700">Quick Tips:</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {wearableSummary.food_recommendations?.slice(0, 2).map((rec: any, idx: number) => (
+                      <div key={`food-${idx}`} className="flex items-start gap-2 bg-orange-50 rounded-lg p-3">
+                        <span className="text-lg">🍽️</span>
+                        <p className="text-xs text-gray-700">{typeof rec === 'string' ? rec : rec.suggestion}</p>
+                      </div>
+                    ))}
+                    {wearableSummary.yoga_recommendations?.slice(0, 2).map((rec: any, idx: number) => (
+                      <div key={`yoga-${idx}`} className="flex items-start gap-2 bg-blue-50 rounded-lg p-3">
+                        <span className="text-lg">🧘</span>
+                        <p className="text-xs text-gray-700">{typeof rec === 'string' ? rec : rec.practice}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              </>
+            ) : (
+              <div className="text-center py-8">
+                <p className="text-gray-600 mb-4">No health data available yet</p>
+                <Button
+                  onClick={() => onNavigate('device')}
+                  className="mx-auto"
+                >
+                  Add Health Data
+                </Button>
+              </div>
+            )}
+
+            {wearableSummary?.hasData && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onNavigate('device')}
+                className="w-full mt-4"
+              >
+                View Full Health Data & Manual Entry
+              </Button>
+            )}
+          </div>
+        </motion.div>
 
         {/* Aura Visualization Section */}
         <motion.div
@@ -718,6 +814,30 @@ export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications }: D
                 </motion.button>
               </div>
             </div>
+          </div>
+        </motion.div>
+
+        {/* Aura History */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.35 }}
+          className="mb-6"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold text-gray-800">Recent Aura Journey</h2>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onNavigate('progress')}
+              className="text-purple-600 hover:text-purple-700"
+            >
+              View All →
+            </Button>
+          </div>
+          <div className="bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50 rounded-2xl p-6 shadow-lg">
+            <AuraHistory days={7} compact={true} showTitle={false} />
+            <p className="text-xs text-gray-600 text-center mt-4">Last 7 days of your energetic signature</p>
           </div>
         </motion.div>
 

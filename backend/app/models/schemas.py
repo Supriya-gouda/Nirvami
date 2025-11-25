@@ -1,6 +1,6 @@
 """Pydantic models for request/response schemas."""
 from pydantic import BaseModel, EmailStr, Field
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 from datetime import datetime, date
 from enum import Enum
 
@@ -55,6 +55,7 @@ class UserProfile(BaseModel):
     email: str
     full_name: Optional[str] = None
     avatar_url: Optional[str] = None
+    phone_number: Optional[str] = None
     dosha_type: Optional[DoshaType] = None
     role: str = "user"
     consent_data_collection: bool = False
@@ -67,6 +68,7 @@ class UserProfile(BaseModel):
 class UpdateProfileRequest(BaseModel):
     full_name: Optional[str] = None
     avatar_url: Optional[str] = None
+    phone_number: Optional[str] = None
     dosha_type: Optional[DoshaType] = None
     consent_data_collection: Optional[bool] = None
     consent_ai_processing: Optional[bool] = None
@@ -195,6 +197,27 @@ class WellnessScore(BaseModel):
 # DOSHA
 # ============================================
 
+class DoshaAnswer(BaseModel):
+    """Single question answer for dosha quiz."""
+    question_id: int
+    answer_value: int  # Score value (e.g., 1-5 or dosha score)
+
+
+class DoshaAssessmentRequest(BaseModel):
+    """Request for dosha assessment submission."""
+    answers: List[DoshaAnswer]
+
+
+class DoshaAssessmentResponse(BaseModel):
+    """Response from dosha assessment."""
+    vata_score: int
+    pitta_score: int
+    kapha_score: int
+    dominant_dosha: Literal["vata", "pitta", "kapha"]
+    primary_dosha: Optional[str] = None  # For backward compatibility
+    secondary_dosha: Optional[str] = None
+
+
 class DoshaQuizRequest(BaseModel):
     quiz_responses: Dict[str, Any]
 
@@ -227,6 +250,7 @@ class CreateMealRequest(BaseModel):
     meal_text: str
     ingredients: Optional[List[str]] = None
     calories: Optional[int] = None
+    dosha_impact_tags: Optional[Dict[str, str]] = None
 
 
 class Meal(BaseModel):
@@ -254,7 +278,32 @@ class MealEmotionCorrelation(BaseModel):
 # WEARABLE
 # ============================================
 
+class WearableIntakeRequest(BaseModel):
+    """Request for smartwatch data intake."""
+    provider: str = "apple_watch"  # apple_watch, fitbit, etc.
+    captured_at: Optional[datetime] = None
+    heart_rate: Optional[int] = None
+    hrv_ms: Optional[int] = None  # heart rate variability in milliseconds
+    steps: Optional[int] = None
+    sleep_hours: Optional[float] = None
+    stress_level: Optional[int] = None  # 1-10 scale
+    calories_burned: Optional[float] = None
+
+
+class ManualEntryRequest(BaseModel):
+    """Request for manual health data entry."""
+    date: str  # ISO date string
+    sleep_hours: Optional[float] = None
+    avg_heart_rate: Optional[int] = None
+    heart_rate: Optional[int] = None  # Alias for avg_heart_rate
+    steps: Optional[int] = None
+    stress_level: Optional[int] = None  # 1-10 scale
+    hrv_ms: Optional[int] = None
+    calories_burned: Optional[float] = None
+
+
 class WearableDataRequest(BaseModel):
+    """Legacy request format for backward compatibility."""
     recorded_at: Optional[datetime] = None
     device_type: str = "apple_watch"
     heart_rate: Optional[int] = None
@@ -271,16 +320,14 @@ class WearableDataRequest(BaseModel):
 class WearableSnapshot(BaseModel):
     id: str
     user_id: str
-    recorded_at: datetime
-    device_type: str
+    source: str  # 'watch' or 'manual'
+    provider: Optional[str] = None
+    captured_at: datetime
     heart_rate: Optional[int] = None
-    hrv: Optional[float] = None
-    eda: Optional[float] = None
-    sleep_hours: Optional[float] = None
-    sleep_quality: Optional[str] = None
+    hrv_ms: Optional[int] = None
     steps: Optional[int] = None
-    active_calories: Optional[int] = None
-    stress_level: Optional[str] = None
+    sleep_hours: Optional[float] = None
+    stress_level: Optional[int] = None
     created_at: datetime
 
 

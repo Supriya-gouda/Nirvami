@@ -7,6 +7,7 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
+import { AuraHistory } from './AuraHistory';
 import {
   LineChart,
   Line,
@@ -40,27 +41,22 @@ export function ProgressAnalyticsPage({ user, onNavigate, onLogout, onOpenNotifi
   const [showAchievement, setShowAchievement] = useState(false);
   const [timeframe, setTimeframe] = useState<'week' | 'month'>('week');
 
-  // Analytics state (fetched from backend) with fallbacks to mock data
+  // Analytics state (fetched from backend)
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [loadingAnalytics, setLoadingAnalytics] = useState<boolean>(false);
-
-  // Mock fallback data for quick visualization when analytics not yet available
-  const weeklyMoodFallback = [
-    { date: 'Mon', mood: 7, stress: 4, energy: 6, balance: 7 },
-    { date: 'Tue', mood: 6, stress: 5, energy: 5, balance: 6 },
-    { date: 'Wed', mood: 8, stress: 3, energy: 8, balance: 8 },
-    { date: 'Thu', mood: 5, stress: 6, energy: 4, balance: 5 },
-    { date: 'Fri', mood: 9, stress: 2, energy: 9, balance: 9 },
-    { date: 'Sat', mood: 8, stress: 3, energy: 7, balance: 8 },
-    { date: 'Sun', mood: 7, stress: 4, energy: 6, balance: 7 },
-  ];
-
-  const monthlyMoodFallback = [
-    { date: 'Week 1', mood: 6.5, stress: 4.5, energy: 6, balance: 6.5 },
-    { date: 'Week 2', mood: 7, stress: 4, energy: 6.5, balance: 7 },
-    { date: 'Week 3', mood: 7.5, stress: 3.5, energy: 7, balance: 7.5 },
-    { date: 'Week 4', mood: 8, stress: 3, energy: 7.5, balance: 8 },
-  ];
+  
+  // Wellness scores state
+  const [wellnessHistory, setWellnessHistory] = useState<any[]>([]);
+  const [loadingWellness, setLoadingWellness] = useState<boolean>(false);
+  
+  // Meal correlations state
+  const [mealCorrelations, setMealCorrelations] = useState<{
+    mood_boosting_foods: Array<{ food: string; impact_score: number; occurrences: number }>;
+    foods_to_watch: Array<{ food: string; impact_score: number; occurrences: number }>;
+    total_foods_analyzed: number;
+  } | null>(null);
+  const [loadingMealCorrelations, setLoadingMealCorrelations] = useState<boolean>(false);
+  const [analyzingCorrelations, setAnalyzingCorrelations] = useState<boolean>(false);
 
   useEffect(() => {
     const loadAnalytics = async () => {
@@ -69,20 +65,61 @@ export function ProgressAnalyticsPage({ user, onNavigate, onLogout, onOpenNotifi
         const data = await api.getAnalytics();
         setAnalytics(data);
       } catch (err) {
-        console.warn('Failed to load analytics, using fallback data', err);
+        console.warn('Failed to load analytics', err);
         setAnalytics(null);
       } finally {
         setLoadingAnalytics(false);
       }
     };
 
+    const loadWellnessData = async () => {
+      try {
+        setLoadingWellness(true);
+        const history = await api.getWellnessHistory({ days: 30 });
+        setWellnessHistory(history || []);
+      } catch (err) {
+        console.warn('Failed to load wellness history', err);
+        setWellnessHistory([]);
+      } finally {
+        setLoadingWellness(false);
+      }
+    };
+    
+    const loadMealCorrelations = async () => {
+      try {
+        setLoadingMealCorrelations(true);
+        const correlations = await api.getMealCorrelations();
+        setMealCorrelations(correlations);
+      } catch (err) {
+        console.warn('Failed to load meal correlations', err);
+        setMealCorrelations(null);
+      } finally {
+        setLoadingMealCorrelations(false);
+      }
+    };
+
+    const handleAnalyzeCorrelations = async () => {
+      try {
+        setAnalyzingCorrelations(true);
+        await api.analyzeMealCorrelations();
+        // Reload correlations after analysis
+        await loadMealCorrelations();
+      } catch (err) {
+        console.error('Failed to analyze correlations', err);
+      } finally {
+        setAnalyzingCorrelations(false);
+      }
+    };
+
     loadAnalytics();
+    loadWellnessData();
+    loadMealCorrelations();
   }, []);
 
   // Transform analytics data for charts
   const getMoodTrendsData = () => {
-    if (!analytics?.emotions?.emotions_over_time) {
-      return timeframe === 'week' ? weeklyMoodFallback : monthlyMoodFallback;
+    if (!analytics?.emotions?.emotions_over_time || analytics.emotions.emotions_over_time.length === 0) {
+      return [];
     }
 
     const emotionsData = analytics.emotions.emotions_over_time;
@@ -105,8 +142,39 @@ export function ProgressAnalyticsPage({ user, onNavigate, onLogout, onOpenNotifi
     });
   };
 
-  // Get key metrics from analytics
+  // Get key metrics from analytics and wellness scores
   const getKeyMetrics = () => {
+    // Try to use real wellness scores first
+    if (wellnessHistory && wellnessHistory.length > 0) {
+      const recent = wellnessHistory.slice(0, 7);
+      const previous = wellnessHistory.slice(7, 14);
+      
+      const avgScore = (scores: any[]) => {
+        if (!scores.length) return 0;
+        return scores.reduce((sum, s) => sum + (s.overall_score || 0), 0) / scores.length;
+      };
+      
+      const recentOverall = avgScore(recent);
+      const previousOverall = avgScore(previous);
+      const overallChange = previousOverall ? ((recentOverall - previousOverall) / previousOverall) * 100 : 0;
+      
+      const recentEmotion = recent.length > 0 ? recent[0].emotion_score || 0 : 0;
+      const recentEnergy = recent.length > 0 ? recent[0].wearable_score || 0 : 0;
+      const recentBalance = recent.length > 0 ? recent[0].engagement_score || 0 : 0;
+      
+      return {
+        avgMood: Number(recentEmotion.toFixed(1)),
+        moodChange: Number(overallChange.toFixed(0)),
+        stressLevel: Number((100 - recentEmotion).toFixed(1)) / 10,
+        stressChange: -Number(overallChange.toFixed(0)),
+        energy: Number((recentEnergy / 10).toFixed(1)),
+        energyChange: 18,
+        balance: Number((recentBalance / 10).toFixed(1)),
+        balanceChange: Number(overallChange.toFixed(0))
+      };
+    }
+    
+    // Fallback to analytics-based calculation
     if (!analytics) {
       return {
         avgMood: 7.4,
@@ -162,7 +230,17 @@ export function ProgressAnalyticsPage({ user, onNavigate, onLogout, onOpenNotifi
       { aspect: 'Kapha', current: 70, optimal: 75 },
     ];
 
-  const wellnessData = analytics?.wearable_insights
+  // Use wellness scores for wellness radar chart data
+  const wellnessData = wellnessHistory && wellnessHistory.length > 0 && wellnessHistory[0]
+    ? [
+      { dimension: 'Sleep', score: wellnessHistory[0].wearable_score || 70 },
+      { dimension: 'Nutrition', score: analytics?.meal_patterns?.meals_logged ? Math.min(100, analytics.meal_patterns.meals_logged * 3) : 75 },
+      { dimension: 'Exercise', score: wellnessHistory[0].wearable_score || 70 },
+      { dimension: 'Mindfulness', score: wellnessHistory[0].emotion_score || 85 },
+      { dimension: 'Social', score: 65 },
+      { dimension: 'Purpose', score: wellnessHistory[0].engagement_score || 78 },
+    ]
+    : analytics?.wearable_insights
     ? [
       { dimension: 'Sleep', score: Math.min(100, (analytics.wearable_insights.average_sleep || 7) * 12.5) },
       { dimension: 'Nutrition', score: analytics.meal_patterns?.meals_logged ? Math.min(100, analytics.meal_patterns.meals_logged * 3) : 75 },
@@ -180,6 +258,8 @@ export function ProgressAnalyticsPage({ user, onNavigate, onLogout, onOpenNotifi
       { dimension: 'Purpose', score: 78 },
     ];
 
+  // TODO: Create achievements table and fetch from backend
+  // For now, using static data as achievements system not yet implemented in DB
   const achievements = [
     { id: 1, title: '7-Day Streak', desc: 'Logged daily for a week', emoji: '🔥', unlocked: true },
     { id: 2, title: 'Yoga Master', desc: 'Completed 20 yoga sessions', emoji: '🧘', unlocked: true },
@@ -371,6 +451,150 @@ export function ProgressAnalyticsPage({ user, onNavigate, onLogout, onOpenNotifi
           </motion.div>
         </div>
 
+        {/* Meal-Mood Correlations */}
+        {mealCorrelations && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.55 }}
+            className="mb-6"
+          >
+            <Card className="border-2 border-purple-200 bg-gradient-to-br from-purple-50 to-blue-50">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <span className="text-2xl">🍽️</span>
+                      AI Health Insight: Food-Mood Connections
+                    </CardTitle>
+                    <p className="text-sm text-gray-600 mt-2">
+                      {mealCorrelations.total_foods_analyzed > 0 
+                        ? `Based on ${mealCorrelations.total_foods_analyzed} foods analyzed from your meal and emotion logs`
+                        : 'Start logging meals and emotions to see personalized food-mood insights'
+                      }
+                    </p>
+                  </div>
+                  <Button 
+                    onClick={handleAnalyzeCorrelations} 
+                    disabled={analyzingCorrelations}
+                    className="bg-purple-600 hover:bg-purple-700"
+                  >
+                    {analyzingCorrelations ? 'Analyzing...' : 'Refresh Analysis'}
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {mealCorrelations.total_foods_analyzed === 0 ? (
+                  <div className="text-center py-8 space-y-4">
+                    <div className="text-6xl">🍽️💭</div>
+                    <h3 className="text-lg font-semibold text-gray-700">No Correlation Data Yet</h3>
+                    <p className="text-gray-600 max-w-md mx-auto">
+                      Start logging your meals and tracking your emotions to discover which foods positively 
+                      or negatively affect your mood. We analyze patterns between what you eat and how you feel 
+                      1-4 hours after meals.
+                    </p>
+                    <Button 
+                      onClick={handleAnalyzeCorrelations} 
+                      disabled={analyzingCorrelations}
+                      className="bg-purple-600 hover:bg-purple-700"
+                    >
+                      {analyzingCorrelations ? 'Analyzing...' : 'Run Analysis Now'}
+                    </Button>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="grid md:grid-cols-2 gap-6">
+                  {/* Mood Boosting Foods */}
+                  <div className="space-y-3">
+                    <h3 className="text-lg font-semibold text-green-700 flex items-center gap-2">
+                      <span className="text-2xl">✨</span>
+                      Top Foods That Boost Your Mood
+                    </h3>
+                    {mealCorrelations.mood_boosting_foods.length > 0 ? (
+                      <div className="space-y-2">
+                        {mealCorrelations.mood_boosting_foods.map((food, index) => (
+                          <motion.div
+                            key={food.food}
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: 0.6 + index * 0.1 }}
+                            className="p-3 bg-white rounded-lg border border-green-200 hover:shadow-md transition-shadow"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1">
+                                <p className="font-medium text-gray-800">{food.food}</p>
+                                <p className="text-xs text-gray-500">
+                                  {food.occurrences} meal{food.occurrences !== 1 ? 's' : ''} logged
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Badge className="bg-green-100 text-green-700 border-green-300">
+                                  +{(food.impact_score * 100).toFixed(0)}%
+                                </Badge>
+                                {index === 0 && <span className="text-2xl">👑</span>}
+                              </div>
+                            </div>
+                          </motion.div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-500 italic">
+                        Log more meals to discover mood-boosting foods
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Foods to Watch */}
+                  <div className="space-y-3">
+                    <h3 className="text-lg font-semibold text-orange-700 flex items-center gap-2">
+                      <span className="text-2xl">⚠️</span>
+                      Foods to Watch
+                    </h3>
+                    {mealCorrelations.foods_to_watch.length > 0 ? (
+                      <div className="space-y-2">
+                        {mealCorrelations.foods_to_watch.map((food, index) => (
+                          <motion.div
+                            key={food.food}
+                            initial={{ opacity: 0, x: 20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: 0.6 + index * 0.1 }}
+                            className="p-3 bg-white rounded-lg border border-orange-200 hover:shadow-md transition-shadow"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1">
+                                <p className="font-medium text-gray-800">{food.food}</p>
+                                <p className="text-xs text-gray-500">
+                                  {food.occurrences} meal{food.occurrences !== 1 ? 's' : ''} logged
+                                </p>
+                              </div>
+                              <Badge className="bg-orange-100 text-orange-700 border-orange-300">
+                                {(food.impact_score * 100).toFixed(0)}%
+                              </Badge>
+                            </div>
+                          </motion.div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-500 italic">
+                        No concerning patterns detected
+                      </p>
+                    )}
+                  </div>
+                </div>
+                
+                <div className="mt-4 p-3 bg-purple-100 rounded-lg border border-purple-200">
+                  <p className="text-sm text-purple-800">
+                    💡 <strong>Pro tip:</strong> These insights are based on the correlation between what you eat and how you feel 1-4 hours after meals. 
+                    Keep logging meals and emotions to get more accurate personalized insights!
+                  </p>
+                </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+
         {/* Achievements */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -407,6 +631,16 @@ export function ProgressAnalyticsPage({ user, onNavigate, onLogout, onOpenNotifi
               </div>
             </CardContent>
           </Card>
+        </motion.div>
+
+        {/* Aura History */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.7 }}
+          className="mb-6"
+        >
+          <AuraHistory days={30} showTitle={true} compact={false} />
         </motion.div>
       </div>
 

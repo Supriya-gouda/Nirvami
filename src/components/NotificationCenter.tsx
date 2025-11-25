@@ -17,7 +17,7 @@ interface NotificationCenterProps {
 }
 
 export function NotificationCenter({ user, onClose }: NotificationCenterProps) {
-  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [alerts, setAlerts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -27,10 +27,23 @@ export function NotificationCenter({ user, onClose }: NotificationCenterProps) {
   const loadAlerts = async () => {
     try {
       setLoading(true);
-      const data = await api.getAlerts();
-      setAlerts(data || []);
+      // Fetch both alerts and notifications
+      const [alertsData, notificationsData] = await Promise.all([
+        api.getAlerts().catch(() => []),
+        api.getNotifications(false).catch(() => [])
+      ]);
+      
+      // Combine and sort by created_at/timestamp
+      const combined = [...(alertsData || []), ...(notificationsData || [])];
+      combined.sort((a, b) => {
+        const dateA = new Date(a.created_at || a.timestamp || 0);
+        const dateB = new Date(b.created_at || b.timestamp || 0);
+        return dateB.getTime() - dateA.getTime();
+      });
+      
+      setAlerts(combined);
     } catch (err) {
-      console.error('Failed to load alerts:', err);
+      console.error('Failed to load notifications:', err);
     } finally {
       setLoading(false);
     }
@@ -38,48 +51,77 @@ export function NotificationCenter({ user, onClose }: NotificationCenterProps) {
 
   const handleMarkRead = async (alertId: string) => {
     try {
-      await api.markAlertRead(alertId);
+      const item = alerts.find(a => a.id === alertId);
+      if (item && item.body) {
+        // It's a notification
+        await api.markNotificationRead(alertId);
+      } else {
+        // It's an alert
+        await api.markAlertRead(alertId);
+      }
       setAlerts(alerts.map(a => a.id === alertId ? { ...a, read: true } : a));
     } catch (err) {
-      console.error('Failed to mark alert as read:', err);
+      console.error('Failed to mark item as read:', err);
     }
   };
 
   const handleMarkAllRead = async () => {
     try {
-      const unreadAlerts = alerts.filter(a => !a.read);
-      await Promise.all(unreadAlerts.map(a => api.markAlertRead(a.id)));
+      const unreadItems = alerts.filter(a => !a.read);
+      await Promise.all(unreadItems.map(item => {
+        if (item.body) {
+          return api.markNotificationRead(item.id);
+        } else {
+          return api.markAlertRead(item.id);
+        }
+      }));
       setAlerts(alerts.map(a => ({ ...a, read: true })));
     } catch (err) {
-      console.error('Failed to mark all alerts as read:', err);
+      console.error('Failed to mark all items as read:', err);
     }
   };
 
-  const getSeverityColor = (severity: string) => {
+  const getSeverityColor = (item: any) => {
+    // Handle both alert severity and notification type
+    const severity = item.severity || item.type || 'low';
     const colors = {
       low: 'bg-blue-100 text-blue-800 border-blue-200',
+      info: 'bg-blue-100 text-blue-800 border-blue-200',
       medium: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-      high: 'bg-red-100 text-red-800 border-red-200'
+      warning: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+      high: 'bg-red-100 text-red-800 border-red-200',
+      error: 'bg-red-100 text-red-800 border-red-200'
     };
     return colors[severity as keyof typeof colors] || colors.low;
   };
 
-  const getSeverityIcon = (severity: string) => {
+  const getSeverityIcon = (item: any) => {
+    const severity = item.severity || item.type || 'low';
     const icons = {
       low: <Info className="w-5 h-5" />,
+      info: <Info className="w-5 h-5" />,
       medium: <AlertTriangle className="w-5 h-5" />,
-      high: <AlertTriangle className="w-5 h-5" />
+      warning: <AlertTriangle className="w-5 h-5" />,
+      high: <AlertTriangle className="w-5 h-5" />,
+      error: <AlertTriangle className="w-5 h-5" />
     };
     return icons[severity as keyof typeof icons] || icons.low;
   };
 
-  const getAlertTypeLabel = (type: string) => {
+  const getAlertTypeLabel = (item: any) => {
+    // Handle both alert_type and notification title
+    if (item.title && !item.alert_type) {
+      return 'Health Alert'; // For notifications
+    }
+    
+    const type = item.alert_type || 'notification';
     const labels = {
       crisis_detected: 'Crisis Alert',
       high_stress: 'High Stress',
       low_mood: 'Low Mood',
       irregular_pattern: 'Irregular Pattern',
-      wellness_milestone: 'Milestone Achieved'
+      wellness_milestone: 'Milestone Achieved',
+      notification: 'Notification'
     };
     return labels[type as keyof typeof labels] || type;
   };
@@ -178,31 +220,31 @@ export function NotificationCenter({ user, onClose }: NotificationCenterProps) {
                       onClick={() => !alert.read && handleMarkRead(alert.id)}
                     >
                       <div className="flex items-start gap-3">
-                        <div className={`p-2 rounded-lg ${getSeverityColor(alert.severity)}`}>
-                          {getSeverityIcon(alert.severity)}
+                        <div className={`p-2 rounded-lg ${getSeverityColor(alert)}`}>
+                          {getSeverityIcon(alert)}
                         </div>
                         
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
                             <Badge
                               variant="outline"
-                              className={`text-xs ${getSeverityColor(alert.severity)}`}
+                              className={`text-xs ${getSeverityColor(alert)}`}
                             >
-                              {getAlertTypeLabel(alert.alert_type)}
+                              {getAlertTypeLabel(alert)}
                             </Badge>
                             {!alert.read && (
                               <div className="w-2 h-2 rounded-full bg-purple-600" />
                             )}
                             <span className="text-xs text-gray-400 ml-auto">
-                              {formatTimestamp(alert.created_at)}
+                              {formatTimestamp(alert.created_at || alert.timestamp)}
                             </span>
                           </div>
                           
                           <h3 className="font-semibold text-gray-900 mb-1">
                             {alert.title}
                           </h3>
-                          <p className="text-sm text-gray-600 line-clamp-2">
-                            {alert.message}
+                          <p className="text-sm text-gray-600 line-clamp-2 whitespace-pre-line">
+                            {alert.body || alert.message}
                           </p>
                         </div>
                       </div>

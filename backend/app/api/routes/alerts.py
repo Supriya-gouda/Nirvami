@@ -67,3 +67,59 @@ async def get_unread_count(
     except Exception as e:
         logger.error(f"Error fetching unread count: {e}")
         return {"count": 0}
+
+
+@router.put("/{alert_id}/acknowledge")
+async def acknowledge_alert(
+    alert_id: str,
+    current_user_id: str = Depends(get_current_user_id)
+):
+    """Mark an alert as acknowledged."""
+    supabase = get_supabase()
+    
+    try:
+        from datetime import datetime
+        
+        result = supabase.table("alerts").update({
+            "status": "acknowledged",
+            "acknowledged_at": datetime.utcnow().isoformat()
+        }).eq("id", alert_id).eq("user_id", current_user_id).execute()
+        
+        if result.data:
+            logger.info(f"✅ Alert {alert_id} acknowledged by user {current_user_id}")
+            return result.data[0]
+        else:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Alert not found")
+            
+    except Exception as e:
+        logger.error(f"❌ Error acknowledging alert: {e}", exc_info=True)
+        from fastapi import HTTPException
+        raise HTTPException(status_code=500, detail=f"Failed to acknowledge alert: {str(e)}")
+
+
+@router.put("/notifications/{notification_id}/read")
+async def mark_notification_read(
+    notification_id: str,
+    current_user_id: str = Depends(get_current_user_id)
+):
+    """Mark a notification as read."""
+    supabase = get_supabase()
+    
+    try:
+        result = supabase.table("notifications").update({
+            "read": True
+        }).eq("id", notification_id).eq("user_id", current_user_id).execute()
+        
+        if result.data:
+            logger.info(f"✅ Notification {notification_id} marked as read by user {current_user_id}")
+            return result.data[0]
+        else:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Notification not found")
+            
+    except Exception as e:
+        logger.error(f"❌ Error marking notification as read: {e}", exc_info=True)
+        from fastapi import HTTPException
+        raise HTTPException(status_code=500, detail=f"Failed to mark notification as read: {str(e)}")
+

@@ -180,6 +180,66 @@ class AlertService:
             raise
     
     @staticmethod
+    async def create_wearable_alert(
+        supabase,
+        user_id: str,
+        severity: str,
+        title: str,
+        message: str,
+        anomalies: list,
+        snapshot_data: dict
+    ):
+        """
+        Create a wearable health alert.
+        
+        Args:
+            supabase: Supabase client
+            user_id: User ID
+            severity: Alert severity (low, medium, high, critical)
+            title: Alert title
+            message: Alert message
+            anomalies: List of detected anomalies
+            snapshot_data: Original wearable snapshot data
+        
+        Returns:
+            Created alert record
+        """
+        try:
+            alert_data = {
+                "id": str(uuid.uuid4()),
+                "user_id": user_id,
+                "alert_type": "wellness_low",  # Using wellness_low for health alerts
+                "severity": severity,
+                "title": title,
+                "message": message,
+                "triggered_by": "wearable",
+                "trigger_metadata": {
+                    "anomalies": anomalies,
+                    "snapshot_preview": {
+                        "heart_rate": snapshot_data.get("heart_rate"),
+                        "sleep_hours": snapshot_data.get("sleep_hours"),
+                        "stress_level": snapshot_data.get("stress_level"),
+                        "captured_at": snapshot_data.get("captured_at")
+                    }
+                },
+                "status": "active",
+                "notified_channels": ["in_app"],  # Will be updated if SMS sent
+                "created_at": datetime.now().isoformat()
+            }
+            
+            result = supabase.table("alerts").insert(alert_data).execute()
+            
+            if result.data:
+                logger.info(f"Created wearable alert for user {user_id}: {title}")
+                return result.data[0]
+            else:
+                raise Exception("Failed to insert alert")
+                
+        except Exception as e:
+            logger.error(f"Error creating wearable alert: {e}")
+            raise
+    
+    @staticmethod
     def get_crisis_email_body() -> str:
         """Get HTML body for crisis alert email."""
         return """

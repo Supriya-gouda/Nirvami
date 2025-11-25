@@ -95,6 +95,15 @@ export interface SendMessageResponse {
   emotion_detected?: string;
 }
 
+export interface ChatSession {
+  id: string;
+  user_id: string;
+  title: string;
+  started_at: string;
+  last_message_at: string;
+  metadata?: Record<string, any>;
+}
+
 // Emotion Types
 export interface EmotionLog {
   id: string;
@@ -123,10 +132,22 @@ export interface EmotionAnalytics {
   emotions_over_time: Array<{ date: string; emotions: Record<string, number> }>;
 }
 
+export interface EmotionAggregate {
+  id: string;
+  user_id: string;
+  date: string;
+  dominant_emotion: string;
+  emotion_distribution: Record<string, number>;
+  average_valence?: number;
+  total_entries: number;
+  created_at: string;
+}
+
 // Aura Types
 export interface AuraEntry {
   id: string;
   user_id: string;
+  date: string;
   color_code: string;
   intensity: number;
   glow_level?: number;
@@ -159,6 +180,56 @@ export interface WellnessScore {
   created_at: string;
 }
 
+// Journal Types
+export interface JournalEntry {
+  id: string;
+  user_id: string;
+  date: string;
+  content: string;
+  mood_tag?: string;
+  created_at: string;
+}
+
+export interface CreateJournalRequest {
+  date: string;
+  content: string;
+  mood_tag?: string;
+}
+
+export interface UpdateJournalRequest {
+  content?: string;
+  mood_tag?: string;
+}
+
+// Goal Types
+export interface Goal {
+  id: string;
+  user_id: string;
+  title: string;
+  description?: string;
+  status: 'active' | 'completed' | 'archived';
+  completion_percent: number;
+  target_date?: string;
+  is_completed: boolean;
+  created_at: string;
+  completed_at?: string;
+}
+
+export interface CreateGoalRequest {
+  title: string;
+  description?: string;
+  target_date?: string;
+}
+
+export interface UpdateGoalRequest {
+  title?: string;
+  description?: string;
+  status?: 'active' | 'completed' | 'archived';
+  completion_percent?: number;
+  target_date?: string;
+  is_completed?: boolean;
+}
+
 // Dosha Types
 export type DoshaType = 'vata' | 'pitta' | 'kapha';
 
@@ -182,8 +253,13 @@ export interface DoshaRecommendations {
   meditation: string[];
 }
 
+export interface DoshaAnswer {
+  question_id: number;
+  answer_value: number;
+}
+
 export interface SubmitDoshaRequest {
-  answers: Record<string, any>;
+  answers: DoshaAnswer[];
 }
 
 // Meal Types

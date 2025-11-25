@@ -14,8 +14,11 @@ def calculate_wellness_score_for_user(user_id: str, target_date: date, supabase)
     try:
         wellness_data = calculate_wellness_score(user_id, target_date, supabase)
         
-        # Insert/update in database
-        supabase.table("wellness_scores").upsert(wellness_data).execute()
+        # Insert/update in database with proper upsert
+        supabase.table("wellness_scores").upsert(
+            wellness_data,
+            on_conflict="user_id,date"
+        ).execute()
         
         logger.info(f"Computed wellness score for user {user_id}: {wellness_data['overall_score']}")
         return True
@@ -151,12 +154,35 @@ def generate_daily_auras():
 
 
 def compute_meal_emotion_correlations():
-    """Compute correlations between meals and emotions."""
+    """Compute correlations between meals and emotions for all users."""
     logger.info("Starting meal-emotion correlation computation...")
     
     try:
-        # Implementation here
-        logger.info("Meal-emotion correlation computation completed")
+        from app.services.meal_service import MealCorrelationService
+        
+        supabase = get_supabase(use_service_role=True)
+        
+        # Get all active users
+        users = supabase.table("profiles").select("id").execute()
+        
+        success_count = 0
+        total_correlations = 0
+        
+        for user in users.data:
+            user_id = user["id"]
+            
+            try:
+                # Run correlation analysis for user
+                result = MealCorrelationService.run_correlation_analysis(user_id)
+                
+                if result["success"]:
+                    success_count += 1
+                    total_correlations += result["correlations_stored"]
+                    
+            except Exception as e:
+                logger.error(f"Error computing correlations for user {user_id}: {e}")
+        
+        logger.info(f"Meal-emotion correlation computation completed: {success_count}/{len(users.data)} users, {total_correlations} correlations stored")
         
     except Exception as e:
         logger.error(f"Error in meal correlation job: {e}")

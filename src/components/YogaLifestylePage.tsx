@@ -42,6 +42,62 @@ interface SoundTrack {
   gradient: string;
 }
 
+// Fallback data functions
+const getDefaultPoses = (): YogaPose[] => [
+  {
+    id: '1',
+    name: 'Mountain Pose',
+    sanskritName: 'Tadasana',
+    duration: '1-2 min',
+    difficulty: 'Beginner',
+    benefits: ['Improves posture', 'Grounds Vata', 'Builds focus'],
+    icon: '🧘',
+  },
+  {
+    id: '2',
+    name: 'Tree Pose',
+    sanskritName: 'Vrksasana',
+    duration: '30-60 sec',
+    difficulty: 'Beginner',
+    benefits: ['Improves balance', 'Strengthens legs', 'Calms mind'],
+    icon: '🌳',
+  },
+  {
+    id: '3',
+    name: 'Warrior II',
+    sanskritName: 'Virabhadrasana II',
+    duration: '30-60 sec',
+    difficulty: 'Intermediate',
+    benefits: ['Builds strength', 'Increases stamina', 'Opens hips'],
+    icon: '⚔️',
+  },
+];
+
+const getDefaultTracks = (dosha: string): SoundTrack[] => [
+  {
+    id: '1',
+    title: 'Ocean Waves & Tibetan Bowls',
+    duration: '15:00',
+    dosha,
+    mood: ['anxious', 'stressed', 'restless'],
+    frequency: '432 Hz',
+    description: 'Grounding frequencies to calm Vata imbalance',
+    icon: '🌊',
+    gradient: 'from-blue-50 to-cyan-50',
+  },
+  {
+    id: '2',
+    title: 'Forest Rain & Flute',
+    duration: '20:00',
+    dosha,
+    mood: ['angry', 'frustrated', 'irritated'],
+    frequency: '528 Hz',
+    description: 'Cooling sounds to balance Pitta fire',
+    icon: '🌧️',
+    gradient: 'from-green-50 to-emerald-50',
+  },
+];
+
 export function YogaLifestylePage({ user, onNavigate, onLogout, onOpenNotifications }: YogaLifestylePageProps) {
   const [showCamera, setShowCamera] = useState(false);
   const [selectedPose, setSelectedPose] = useState<YogaPose | null>(null);
@@ -53,155 +109,99 @@ export function YogaLifestylePage({ user, onNavigate, onLogout, onOpenNotificati
   const [volume, setVolume] = useState([70]);
   const [wearableData, setWearableData] = useState<WearableData | null>(null);
   const [currentUserDosha, setCurrentUserDosha] = useState<'Vata' | 'Pitta' | 'Kapha'>('Vata');
+  const [yogaPoses, setYogaPoses] = useState<YogaPose[]>([]);
+  const [soundTracks, setSoundTracks] = useState<SoundTrack[]>([]);
+  const [ayurvedaTips, setAyurvedaTips] = useState<any[]>([]);
+  const [isLoadingContent, setIsLoadingContent] = useState(true);
 
   // Fetch latest wearable data and dosha on mount
   useEffect(() => {
     const loadData = async () => {
+      setIsLoadingContent(true);
       try {
-        const [wearable, doshaData] = await Promise.all([
-          api.getLatestWearable(),
-          api.getCurrentDosha()
-        ]);
-        setWearableData(wearable);
+        // Load wearable data
+        const wearable = await api.getLatestWearable().catch(() => null);
+        if (wearable) {
+          setWearableData(wearable);
+        }
 
-        // Set user's dominant dosha
+        // Load dosha assessment
+        const doshaData = await api.getCurrentDosha().catch(() => null);
+        let userDosha = 'Vata';
         if (doshaData?.dominant_dosha) {
           const dominantDosha = doshaData.dominant_dosha.charAt(0).toUpperCase() + doshaData.dominant_dosha.slice(1);
           setCurrentUserDosha(dominantDosha as 'Vata' | 'Pitta' | 'Kapha');
+          userDosha = dominantDosha;
         }
+
+        // Fetch yoga poses based on dosha
+        const posesResponse = await api.getYogaPoses({
+          dosha: userDosha.toLowerCase()
+        }).catch(() => ({ success: false, poses: [] }));
+        
+        if (posesResponse.success && posesResponse.poses && posesResponse.poses.length > 0) {
+          // Transform database poses to component format
+          const transformedPoses = posesResponse.poses.map((pose: any) => ({
+            id: pose.id,
+            name: pose.name,
+            sanskritName: pose.sanskrit_name || '',
+            duration: pose.duration || '1-2 min',
+            difficulty: pose.difficulty || 'Beginner',
+            benefits: pose.benefits || [],
+            icon: '🧘',
+          }));
+          setYogaPoses(transformedPoses);
+        } else {
+          // Fallback poses if database is empty
+          setYogaPoses(getDefaultPoses());
+        }
+
+        // Fetch sound tracks based on dosha
+        const tracksResponse = await api.getSoundTracks({
+          dosha: userDosha.toLowerCase()
+        }).catch(() => ({ success: false, tracks: [] }));
+        
+        if (tracksResponse.success && tracksResponse.tracks && tracksResponse.tracks.length > 0) {
+          // Transform database tracks to component format
+          const transformedTracks = tracksResponse.tracks.map((track: any) => ({
+            id: track.id,
+            title: track.title,
+            duration: track.duration || '15:00',
+            dosha: userDosha,
+            mood: track.emotion_tags || [],
+            frequency: track.frequency_hz ? `${track.frequency_hz} Hz` : '432 Hz',
+            description: track.description || '',
+            icon: track.icon || '🎵',
+            gradient: track.thumbnail_gradient || 'from-purple-50 to-pink-50',
+          }));
+          setSoundTracks(transformedTracks);
+        } else {
+          // Fallback tracks if database is empty
+          setSoundTracks(getDefaultTracks(userDosha));
+        }
+
+        // Fetch ayurveda resources based on dosha
+        const resourcesResponse = await api.getAyurvedaResources({
+          dosha: userDosha.toLowerCase(),
+          limit: 5
+        }).catch(() => ({ success: false, resources: [] }));
+        
+        if (resourcesResponse.success && resourcesResponse.resources) {
+          setAyurvedaTips(resourcesResponse.resources);
+        }
+
       } catch (err) {
         console.warn('Failed to load user data', err);
+        // Set fallback data
+        setYogaPoses(getDefaultPoses());
+        setSoundTracks(getDefaultTracks('Vata'));
+      } finally {
+        setIsLoadingContent(false);
       }
     };
 
     loadData();
   }, []);
-
-  const yogaPoses: YogaPose[] = [
-    {
-      id: '1',
-      name: 'Mountain Pose',
-      sanskritName: 'Tadasana',
-      duration: '1-2 min',
-      difficulty: 'Beginner',
-      benefits: ['Improves posture', 'Grounds Vata', 'Builds focus'],
-      icon: '🧘',
-    },
-    {
-      id: '2',
-      name: 'Tree Pose',
-      sanskritName: 'Vrksasana',
-      duration: '30-60 sec',
-      difficulty: 'Beginner',
-      benefits: ['Improves balance', 'Strengthens legs', 'Calms mind'],
-      icon: '🌳',
-    },
-    {
-      id: '3',
-      name: 'Warrior II',
-      sanskritName: 'Virabhadrasana II',
-      duration: '30-60 sec',
-      difficulty: 'Intermediate',
-      benefits: ['Builds strength', 'Increases stamina', 'Opens hips'],
-      icon: '⚔️',
-    },
-    {
-      id: '4',
-      name: 'Child\'s Pose',
-      sanskritName: 'Balasana',
-      duration: '1-3 min',
-      difficulty: 'Beginner',
-      benefits: ['Releases tension', 'Calms nervous system', 'Gentle stretch'],
-      icon: '🙏',
-    },
-    {
-      id: '5',
-      name: 'Downward Dog',
-      sanskritName: 'Adho Mukha Svanasana',
-      duration: '1-3 min',
-      difficulty: 'Intermediate',
-      benefits: ['Full body stretch', 'Energizes', 'Strengthens'],
-      icon: '🐕',
-    },
-    {
-      id: '6',
-      name: 'Corpse Pose',
-      sanskritName: 'Savasana',
-      duration: '5-10 min',
-      difficulty: 'Beginner',
-      benefits: ['Deep relaxation', 'Reduces stress', 'Integrates practice'],
-      icon: '😌',
-    },
-  ];
-
-  const soundTracks: SoundTrack[] = [
-    {
-      id: '1',
-      title: 'Ocean Waves & Tibetan Bowls',
-      duration: '15:00',
-      dosha: 'Vata',
-      mood: ['anxious', 'stressed', 'restless'],
-      frequency: '432 Hz',
-      description: 'Grounding frequencies to calm Vata imbalance',
-      icon: '🌊',
-      gradient: 'from-blue-50 to-cyan-50',
-    },
-    {
-      id: '2',
-      title: 'Forest Rain & Flute',
-      duration: '20:00',
-      dosha: 'Pitta',
-      mood: ['angry', 'frustrated', 'irritated'],
-      frequency: '528 Hz',
-      description: 'Cooling sounds to balance Pitta fire',
-      icon: '🌧️',
-      gradient: 'from-green-50 to-emerald-50',
-    },
-    {
-      id: '3',
-      title: 'Energizing Drum Rhythms',
-      duration: '12:00',
-      dosha: 'Kapha',
-      mood: ['tired', 'lethargic', 'unmotivated'],
-      frequency: '639 Hz',
-      description: 'Uplifting beats to stimulate Kapha energy',
-      icon: '🥁',
-      gradient: 'from-orange-50 to-red-50',
-    },
-    {
-      id: '4',
-      title: 'Himalayan Singing Bowls',
-      duration: '30:00',
-      dosha: 'Vata',
-      mood: ['calm', 'meditative', 'peaceful'],
-      frequency: '528 Hz',
-      description: 'Universal healing frequency for balance',
-      icon: '🔮',
-      gradient: 'from-purple-50 to-pink-50',
-    },
-    {
-      id: '5',
-      title: 'Morning Sunrise Ragas',
-      duration: '18:00',
-      dosha: 'Kapha',
-      mood: ['energized', 'motivated', 'uplifted'],
-      frequency: '396 Hz',
-      description: 'Traditional ragas to enhance vitality',
-      icon: '🎵',
-      gradient: 'from-amber-50 to-yellow-50',
-    },
-    {
-      id: '6',
-      title: 'Moonlight Serenity',
-      duration: '25:00',
-      dosha: 'Pitta',
-      mood: ['calm', 'relaxed', 'peaceful'],
-      frequency: '174 Hz',
-      description: 'Gentle evening sounds for deep rest',
-      icon: '🌙',
-      gradient: 'from-indigo-50 to-blue-50',
-    },
-  ];
 
   const moods = [
     { value: 'none', label: 'None', emoji: '—' },
@@ -284,9 +284,78 @@ export function YogaLifestylePage({ user, onNavigate, onLogout, onOpenNotificati
           animate={{ opacity: 1, y: 0 }}
           className="mb-8"
         >
-          <h1 className="mb-2">Yoga & Lifestyle</h1>
-          <p className="text-gray-600">Personalized practices for mind-body balance</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="mb-2">Yoga & Lifestyle</h1>
+              <p className="text-gray-600">Personalized practices for mind-body balance</p>
+              {currentUserDosha && (
+                <div className="mt-2 flex items-center gap-2">
+                  <Badge className="bg-purple-100 text-purple-700">
+                    Your Dosha: {currentUserDosha}
+                  </Badge>
+                </div>
+              )}
+            </div>
+            <Button
+              onClick={() => onNavigate('dosha')}
+              className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+              size="lg"
+            >
+              <Sparkles className="w-5 h-5 mr-2" />
+              {currentUserDosha ? 'Retake Dosha Quiz' : 'Discover Your Dosha'}
+            </Button>
+          </div>
         </motion.div>
+
+        {/* Ayurveda Wellness Tips */}
+        {ayurvedaTips.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="mb-8"
+          >
+            <Card className="bg-gradient-to-br from-amber-50 to-orange-50 border-amber-200">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-amber-900">
+                  <Sparkles className="w-5 h-5 text-amber-600" />
+                  Ayurvedic Wellness Tips for {currentUserDosha} Dosha
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid md:grid-cols-2 gap-4">
+                  {ayurvedaTips.slice(0, 4).map((tip, index) => (
+                    <motion.div
+                      key={tip.id || index}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.1 + index * 0.05 }}
+                      className="p-4 rounded-lg bg-white/80 backdrop-blur-sm border border-amber-100"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="text-2xl">
+                          {tip.category === 'diet' && '🍽️'}
+                          {tip.category === 'yoga' && '🧘'}
+                          {tip.category === 'meditation' && '🧘‍♀️'}
+                          {tip.category === 'lifestyle' && '🌿'}
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="font-medium text-gray-900 mb-1">{tip.title}</h4>
+                          <p className="text-sm text-gray-600 line-clamp-3">{tip.content}</p>
+                          <div className="mt-2">
+                            <Badge variant="outline" className="text-xs">
+                              {tip.category}
+                            </Badge>
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
 
         <div className="grid md:grid-cols-3 gap-6 mb-8">
           {/* Today's Yoga Plan */}

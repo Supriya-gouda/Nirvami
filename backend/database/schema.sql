@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS profiles (
     email TEXT NOT NULL,
     full_name TEXT,
     avatar_url TEXT,
+    phone_number TEXT,  -- For SMS notifications
     dosha_type TEXT CHECK (dosha_type IN ('vata', 'pitta', 'kapha', 'vata-pitta', 'pitta-kapha', 'vata-kapha', 'tridosha')),
     role TEXT DEFAULT 'user' CHECK (role IN ('user', 'admin')),
     consent_data_collection BOOLEAN DEFAULT false,
@@ -117,9 +118,38 @@ CREATE TABLE IF NOT EXISTS aura_entries (
 );
 
 -- ============================================
--- 5. WELLNESS SCORING
+-- 5. WELLNESS SCORING & ENGAGEMENT
 -- ============================================
 
+-- Journal entries for user reflection
+CREATE TABLE IF NOT EXISTS journal_entries (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+    date DATE NOT NULL,
+    content TEXT NOT NULL,
+    mood_tag TEXT, -- e.g., 'happy', 'stressed', 'calm', 'anxious'
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_journal_user_date ON journal_entries(user_id, date DESC);
+
+-- Goals tracking
+CREATE TABLE IF NOT EXISTS goals (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    description TEXT,
+    status TEXT DEFAULT 'active' CHECK (status IN ('active', 'completed', 'archived')),
+    completion_percent INTEGER DEFAULT 0 CHECK (completion_percent >= 0 AND completion_percent <= 100),
+    target_date DATE,
+    is_completed BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    completed_at TIMESTAMPTZ
+);
+
+CREATE INDEX idx_goals_user_status ON goals(user_id, status, target_date);
+
+-- Wellness scores
 CREATE TABLE IF NOT EXISTS wellness_scores (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
     user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
@@ -201,39 +231,72 @@ CREATE TABLE IF NOT EXISTS meal_emotion_correlations (
 -- 8. WEARABLE DEVICE INTEGRATION
 -- ============================================
 
+-- Raw data from watch OR manual entry
 CREATE TABLE IF NOT EXISTS wearable_snapshots (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
     user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
-    recorded_at TIMESTAMPTZ NOT NULL,
-    device_type TEXT DEFAULT 'apple_watch',
-    heart_rate INTEGER,
-    hrv FLOAT, -- Heart Rate Variability
-    eda FLOAT, -- Electrodermal Activity
-    sleep_hours FLOAT,
-    sleep_quality TEXT CHECK (sleep_quality IN ('poor', 'fair', 'good', 'excellent')),
+    source VARCHAR(20) NOT NULL DEFAULT 'manual',        -- 'watch' or 'manual'
+    provider VARCHAR(50),                                -- 'apple_watch', 'fitbit', 'manual_form'
+    captured_at TIMESTAMPTZ NOT NULL,                    -- exact time of reading (use recorded_at as alias in queries)
+    
+    heart_rate INTEGER,                                  -- bpm
+    hrv_ms INTEGER,                                      -- heart rate variability in ms
     steps INTEGER,
+    sleep_hours NUMERIC(4,2),
+    stress_level INTEGER,                                -- 1-10 scale
+    calories_burned NUMERIC(6,2),
+    
+    -- Legacy fields for backward compatibility
+    eda FLOAT,                                           -- Electrodermal Activity
+    sleep_quality TEXT CHECK (sleep_quality IN ('poor', 'fair', 'good', 'excellent')),
     active_calories INTEGER,
-    stress_level TEXT CHECK (stress_level IN ('low', 'moderate', 'high')),
-    raw_data JSONB,
+    
+    raw_payload JSONB,                                   -- optional, original data from device
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_wearable_user_time ON wearable_snapshots(user_id, recorded_at DESC);
+-- Support legacy recorded_at queries
+CREATE INDEX idx_wearable_user_time ON wearable_snapshots(user_id, captured_at DESC);
+CREATE INDEX idx_wearable_source ON wearable_snapshots(user_id, source);
 
--- Daily wearable aggregates
+-- Aggregated daily stats per user
 CREATE TABLE IF NOT EXISTS wearable_daily_stats (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
     user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
     date DATE NOT NULL,
-    avg_heart_rate FLOAT,
-    avg_hrv FLOAT,
-    total_sleep_hours FLOAT,
+    
+    avg_heart_rate NUMERIC(5,2),
+    min_heart_rate INTEGER,
+    max_heart_rate INTEGER,
+    avg_hrv_ms NUMERIC(6,2),
     total_steps INTEGER,
-    stress_indicators INTEGER, -- count of high-stress periods
-    insights TEXT[],
+    sleep_hours NUMERIC(4,2),
+    avg_stress_level NUMERIC(4,2),
+    
+    data_source VARCHAR(20),                             -- 'watch', 'manual', 'mixed'
+    insights TEXT[],                                     -- computed insights
     created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(user_id, date)
 );
+
+-- ============================================
+-- 8.5. DAILY ROUTINES (Dinacharya)
+-- ============================================
+
+-- User's daily routine activities (allows multiple entries per day)
+CREATE TABLE IF NOT EXISTS daily_routines (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+    date DATE NOT NULL,
+    time TIME NOT NULL,
+    activity TEXT NOT NULL,
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_daily_routines_user_date ON daily_routines(user_id, date DESC);
+CREATE INDEX idx_daily_routines_user_time ON daily_routines(user_id, date DESC, time);
 
 -- ============================================
 -- 9. ALERTS & NOTIFICATIONS
@@ -319,12 +382,15 @@ ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE emotion_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE emotion_aggregates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE aura_entries ENABLE ROW LEVEL SECURITY;
+ALTER TABLE journal_entries ENABLE ROW LEVEL SECURITY;
+ALTER TABLE goals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE wellness_scores ENABLE ROW LEVEL SECURITY;
 ALTER TABLE dosha_assessments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE meals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE meal_emotion_correlations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE wearable_snapshots ENABLE ROW LEVEL SECURITY;
 ALTER TABLE wearable_daily_stats ENABLE ROW LEVEL SECURITY;
+ALTER TABLE daily_routines ENABLE ROW LEVEL SECURITY;
 ALTER TABLE alerts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 
@@ -354,6 +420,12 @@ CREATE POLICY "Users can view own aggregates" ON emotion_aggregates
 CREATE POLICY "Users can view own aura" ON aura_entries
     FOR ALL USING (auth.uid() = user_id);
 
+CREATE POLICY "Users can manage own journals" ON journal_entries
+    FOR ALL USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can manage own goals" ON goals
+    FOR ALL USING (auth.uid() = user_id);
+
 CREATE POLICY "Users can view own scores" ON wellness_scores
     FOR ALL USING (auth.uid() = user_id);
 
@@ -370,6 +442,9 @@ CREATE POLICY "Users can view own wearable data" ON wearable_snapshots
     FOR ALL USING (auth.uid() = user_id);
 
 CREATE POLICY "Users can view own wearable stats" ON wearable_daily_stats
+    FOR ALL USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can manage own routines" ON daily_routines
     FOR ALL USING (auth.uid() = user_id);
 
 CREATE POLICY "Users can view own alerts" ON alerts

@@ -45,133 +45,117 @@ class VerifyTokenResponse(BaseModel):
 
 @router.post("/register", response_model=AuthResponse)
 async def register(data: RegisterRequest):
-    """Register a new user and send confirmation email."""
+    """Register a new user with improved error handling."""
+    logger.info(f"📝 Registration request received for: {data.email}")
+    
     supabase_client = get_supabase()
+    supabase_admin = get_supabase(use_service_role=True)
     
     try:
-        # First, try normal signup
-        signup_result = supabase_client.auth.sign_up({
+        # Check if user already exists first
+        try:
+            existing = supabase_admin.table("profiles").select("id").eq("email", data.email).execute()
+            if existing.data and len(existing.data) > 0:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Email already registered. Please use Sign In."
+                )
+        except HTTPException:
+            raise
+        except Exception as check_error:
+            logger.debug(f"Profile check error (expected if new): {check_error}")
+        
+        # Create user with admin API
+        logger.info(f"Creating user via admin API: {data.email}")
+        admin_user_result = supabase_admin.auth.admin.create_user({
             "email": data.email,
             "password": data.password,
-            "options": {
-                "data": {
-                    "full_name": data.full_name or "",
-                    "age": data.age,
-                    "gender": data.gender,
-                }
+            "email_confirm": True,  # Auto-confirm for now
+            "user_metadata": {
+                "full_name": data.full_name or "",
+                "age": data.age,
+                "gender": data.gender,
             }
         })
         
-        if signup_result.user is None:
+        if not admin_user_result or not admin_user_result.user:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Failed to create user"
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to create user account"
             )
         
-        logger.info(f"User created: {signup_result.user.email}")
+        user_id = str(admin_user_result.user.id)
+        logger.info(f"✅ User created: {data.email} (ID: {user_id})")
         
-        # If we got a session, user is auto-confirmed (email confirmation disabled)
-        if signup_result.session:
-            logger.info(f"User auto-confirmed, returning session: {data.email}")
-            return AuthResponse(
-                access_token=signup_result.session.access_token,
-                token_type="bearer",
-                user={
-                    "id": str(signup_result.user.id),
-                    "email": signup_result.user.email,
-                    "full_name": data.full_name,
-                    "age": data.age,
-                    "gender": data.gender,
-                    "created_at": str(signup_result.user.created_at) if hasattr(signup_result.user, 'created_at') else "",
-                }
-            )
-        
-        # No session means email confirmation is required
-        logger.info(f"Email confirmation required for: {data.email}")
-        
-        # Generate confirmation token
-        token = secrets.token_urlsafe(32)
-        token_hash = hashlib.sha256(token.encode()).hexdigest()
-        
-        # Store token with user info (expires in 24 hours)
-        confirmation_tokens[token_hash] = {
-            "user_id": str(signup_result.user.id),
+        # Create profile with retry logic
+        profile_data = {
+            "id": user_id,
             "email": data.email,
-            "password": data.password,
-            "full_name": data.full_name,
-            "age": data.age,
-            "gender": data.gender,
-            "expires": datetime.now() + timedelta(hours=24)
+            "full_name": data.full_name or "",
+            "created_at": datetime.utcnow().isoformat()
         }
         
-        # Generate confirmation URL
-        confirmation_url = f"http://localhost:8000/api/v1/auth/confirm?token={token}"
+        if data.age:
+            profile_data["age"] = data.age
+        if data.gender:
+            profile_data["gender"] = data.gender
         
-        # Send confirmation email
-        email_sent = send_confirmation_email(
-            to_email=data.email,
-            confirmation_url=confirmation_url,
-            full_name=data.full_name
-        )
-        
-        if email_sent:
-            logger.info(f"Confirmation email sent to {data.email}")
-            raise HTTPException(
-                status_code=status.HTTP_201_CREATED,
-                detail="Account created! Please check your email to confirm your account."
-            )
-        else:
-            # Email not sent - SMTP not configured
-            # Try to auto-confirm with service role
-            logger.warning(f"Email not sent, attempting auto-confirmation: {data.email}")
-            
+        max_retries = 3
+        for attempt in range(max_retries):
             try:
-                supabase_admin = get_supabase(use_service_role=True)
-                
-                # Update user to confirm email
-                update_result = supabase_admin.auth.admin.update_user_by_id(
-                    str(signup_result.user.id),
-                    {"email_confirm": True}
-                )
-                
-                logger.info(f"User email confirmed via service role: {data.email}")
-                
-                # Now try to sign in
-                sign_in_result = supabase_client.auth.sign_in_with_password({
-                    "email": data.email,
-                    "password": data.password
-                })
-                
-                if sign_in_result.session:
-                    logger.info(f"User signed in successfully after auto-confirmation: {data.email}")
-                    return AuthResponse(
-                        access_token=sign_in_result.session.access_token,
-                        token_type="bearer",
-                        user={
-                            "id": str(signup_result.user.id),
-                            "email": signup_result.user.email,
-                            "full_name": data.full_name,
-                            "age": data.age,
-                            "gender": data.gender,
-                            "created_at": str(signup_result.user.created_at) if hasattr(signup_result.user, 'created_at') else "",
-                        }
-                    )
-            except Exception as confirm_error:
-                logger.error(f"Auto-confirmation failed: {confirm_error}")
+                result = supabase_admin.table("profiles").insert(profile_data).execute()
+                if result.data and len(result.data) > 0:
+                    logger.info(f"✅ Profile created: {data.email}")
+                    break
+            except Exception as profile_error:
+                if attempt == max_retries - 1:
+                    logger.error(f"❌ Profile creation failed after {max_retries} attempts: {profile_error}")
+                else:
+                    logger.warning(f"Profile creation attempt {attempt + 1} failed, retrying...")
+                    import time
+                    time.sleep(0.5)
+        
+        # Sign in the user
+        logger.info(f"Signing in user: {data.email}")
+        try:
+            sign_in_result = supabase_client.auth.sign_in_with_password({
+                "email": data.email,
+                "password": data.password
+            })
             
-            # If all else fails, user needs to sign in manually
+            if not sign_in_result.session:
+                raise HTTPException(
+                    status_code=status.HTTP_201_CREATED,
+                    detail="Account created successfully! Please sign in."
+                )
+            
+            logger.info(f"✅ Registration complete: {data.email}")
+            return AuthResponse(
+                access_token=sign_in_result.session.access_token,
+                token_type="bearer",
+                user={
+                    "id": user_id,
+                    "email": data.email,
+                    "full_name": data.full_name,
+                    "created_at": str(admin_user_result.user.created_at) if hasattr(admin_user_result.user, 'created_at') else "",
+                }
+            )
+        except HTTPException:
+            raise
+        except Exception as login_error:
+            logger.error(f"Auto-login failed: {login_error}")
             raise HTTPException(
                 status_code=status.HTTP_201_CREATED,
-                detail="Account created! SMTP not configured - please contact admin to confirm your email."
+                detail="Account created successfully! Please sign in."
             )
-        
+            
     except HTTPException:
         raise
     except Exception as e:
         error_msg = str(e).lower()
-        logger.error(f"Registration error: {e}")
+        logger.error(f"❌ Registration error: {e}", exc_info=True)
         
-        if "already" in error_msg or "duplicate" in error_msg or "exists" in error_msg:
+        if "already" in error_msg or "duplicate" in error_msg or "exists" in error_msg or "unique" in error_msg:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Email already registered. Please use Sign In."
@@ -179,7 +163,7 @@ async def register(data: RegisterRequest):
         
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Registration failed: {str(e)}"
+            detail="Registration failed. Please try again or contact support."
         )
 
 
@@ -317,6 +301,9 @@ async def confirm_email(token: str):
 @router.post("/login", response_model=AuthResponse)
 async def login(data: LoginRequest):
     """Login user."""
+    import time
+    start_time = time.time()
+    
     supabase = get_supabase()
     
     try:
@@ -325,11 +312,28 @@ async def login(data: LoginRequest):
             "password": data.password
         })
         
+        auth_time = time.time() - start_time
+        logger.info(f"⏱️ Login auth took {auth_time:.2f}s")
+        
         if not response.session:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid credentials"
             )
+        
+        # Fetch profile in parallel (don't block response)
+        profile_start = time.time()
+        try:
+            profile_result = supabase.table("profiles").select("full_name").eq("id", response.user.id).single().execute()
+            full_name = profile_result.data.get("full_name") if profile_result.data else None
+            profile_time = time.time() - profile_start
+            logger.info(f"⏱️ Profile fetch took {profile_time:.2f}s")
+        except Exception as profile_error:
+            logger.warning(f"Could not fetch profile: {profile_error}")
+            full_name = None
+        
+        total_time = time.time() - start_time
+        logger.info(f"⏱️ Total login time: {total_time:.2f}s")
         
         return AuthResponse(
             access_token=response.session.access_token,
@@ -337,9 +341,12 @@ async def login(data: LoginRequest):
             user={
                 "id": response.user.id,
                 "email": response.user.email,
+                "full_name": full_name,
                 "created_at": str(response.user.created_at),
             }
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Login error: {e}")
         raise HTTPException(

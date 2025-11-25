@@ -22,25 +22,21 @@ async def get_optional_token(
     token = credentials.credentials
     
     try:
-        payload = jwt.decode(
-            token,
-            settings.SECRET_KEY,
-            algorithms=["HS256"],
-            options={"verify_aud": False}
-        )
+        # Use Supabase to verify the token
+        supabase = get_supabase()
+        user_response = supabase.auth.get_user(token)
         
-        user_id: str = payload.get("sub")
-        if user_id is None:
-            return None
+        if user_response and user_response.user:
+            return {
+                "user_id": user_response.user.id,
+                "email": user_response.user.email,
+                "role": user_response.user.role if hasattr(user_response.user, 'role') else "user",
+                "user": user_response.user
+            }
         
-        return {
-            "user_id": user_id,
-            "email": payload.get("email"),
-            "role": payload.get("role", "user"),
-            "payload": payload
-        }
-    
-    except JWTError as e:
+        return None
+        
+    except Exception as e:
         logger.warning(f"Invalid token: {e}")
         return None
 
@@ -63,30 +59,26 @@ async def verify_token(
     token = credentials.credentials
     
     try:
-        # Verify JWT signature with Supabase JWT secret
-        # Supabase uses HS256 algorithm
-        payload = jwt.decode(
-            token,
-            settings.SECRET_KEY,
-            algorithms=["HS256"],
-            options={"verify_aud": False}
-        )
+        # Use Supabase to verify the token
+        supabase = get_supabase()
+        user_response = supabase.auth.get_user(token)
         
-        user_id: str = payload.get("sub")
-        if user_id is None:
+        if not user_response or not user_response.user:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid authentication credentials"
             )
         
         return {
-            "user_id": user_id,
-            "email": payload.get("email"),
-            "role": payload.get("role", "user"),
-            "payload": payload
+            "user_id": user_response.user.id,
+            "email": user_response.user.email,
+            "role": user_response.user.role if hasattr(user_response.user, 'role') else "user",
+            "user": user_response.user
         }
     
-    except JWTError as e:
+    except HTTPException:
+        raise
+    except Exception as e:
         logger.error(f"JWT verification failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -110,9 +102,9 @@ async def get_current_user_id(
     if auth_data and auth_data.get("user_id"):
         return auth_data["user_id"]
     
-    # For development/testing - use a default test user
+    # For development/testing - use a valid UUID format test user
     logger.warning("No authentication provided, using test user")
-    return "test-user-123"
+    return "00000000-0000-0000-0000-000000000000"
 
 
 async def require_admin(

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Send, Mic, MicOff, Sparkles, AlertTriangle } from 'lucide-react';
+import { Send, Mic, MicOff, Sparkles, AlertTriangle, History } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Navigation } from './Navigation';
@@ -189,17 +189,28 @@ export function ChatbotPage({ user, onNavigate, onLogout, onOpenNotifications }:
           className="mb-4"
         >
           <Card className="p-4 bg-gradient-to-r from-purple-500 to-blue-500 text-white">
-            <div className="flex items-center gap-3">
-              <motion.div
-                animate={{ rotate: 360 }}
-                transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-              >
-                <Sparkles className="w-6 h-6" />
-              </motion.div>
-              <div>
-                <h2>AI Wellness Companion</h2>
-                <p className="text-sm text-purple-100">Powered by RAG, Emotion AI, and Ayurvedic wisdom</p>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                >
+                  <Sparkles className="w-6 h-6" />
+                </motion.div>
+                <div>
+                  <h2>AI Wellness Companion</h2>
+                  <p className="text-sm text-purple-100">Powered by RAG, Emotion AI, and Ayurvedic wisdom</p>
+                </div>
               </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-white hover:bg-white/20"
+                onClick={() => onNavigate('conversation-history')}
+              >
+                <History className="w-4 h-4 mr-2" />
+                History
+              </Button>
             </div>
           </Card>
         </motion.div>

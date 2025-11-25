@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { Smile, Frown, Meh, ThumbsUp, ThumbsDown, X } from 'lucide-react';
+import { motion } from 'motion/react';
+import { Smile, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
 import { Button } from './ui/button';
+import { toast } from 'sonner';
 import api from '../services/api';
 
 interface MoodInputPopupProps {
@@ -11,48 +12,63 @@ interface MoodInputPopupProps {
   onMoodSubmitted: () => void;
 }
 
+// Exact mood options as specified: ["joy","sadness","anger","fear","anxiety","stress","calm","neutral"]
 const moodOptions = [
-  { value: 'joy', label: 'Joyful', emoji: '😊', color: 'from-yellow-400 to-orange-400' },
+  { value: 'joy', label: 'Joy', emoji: '😊', color: 'from-yellow-400 to-orange-400' },
+  { value: 'sadness', label: 'Sadness', emoji: '😢', color: 'from-blue-500 to-indigo-600' },
+  { value: 'anger', label: 'Anger', emoji: '😠', color: 'from-red-500 to-red-700' },
+  { value: 'fear', label: 'Fear', emoji: '😨', color: 'from-purple-500 to-indigo-700' },
+  { value: 'anxiety', label: 'Anxiety', emoji: '😰', color: 'from-yellow-500 to-red-500' },
+  { value: 'stress', label: 'Stress', emoji: '😓', color: 'from-orange-500 to-red-600' },
   { value: 'calm', label: 'Calm', emoji: '😌', color: 'from-blue-400 to-cyan-400' },
-  { value: 'excited', label: 'Excited', emoji: '🤩', color: 'from-pink-400 to-purple-400' },
   { value: 'neutral', label: 'Neutral', emoji: '😐', color: 'from-gray-400 to-gray-500' },
-  { value: 'sad', label: 'Sad', emoji: '😢', color: 'from-blue-500 to-indigo-600' },
-  { value: 'anxious', label: 'Anxious', emoji: '😰', color: 'from-yellow-500 to-red-500' },
-  { value: 'angry', label: 'Angry', emoji: '😠', color: 'from-red-500 to-red-700' },
-  { value: 'tired', label: 'Tired', emoji: '😴', color: 'from-purple-400 to-purple-600' },
 ];
 
 export function MoodInputPopup({ isOpen, onClose, onMoodSubmitted }: MoodInputPopupProps) {
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
   const [intensity, setIntensity] = useState(5);
-  const [note, setNote] = useState('');
+  const [energy, setEnergy] = useState<number | null>(null);
+  const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
-    if (!selectedMood) return;
+    // Validation: mood and intensity are required
+    if (!selectedMood) {
+      toast.error('Please select a mood');
+      return;
+    }
+    if (!intensity || intensity < 1 || intensity > 10) {
+      toast.error('Please set intensity between 1 and 10');
+      return;
+    }
 
     setLoading(true);
     try {
-      await api.logEmotion({
-        emotion: selectedMood,
+      const response = await api.logMoodFromPopup({
+        mood: selectedMood,
         intensity,
-        notes: note || undefined,
-        detected_from: 'manual',
+        energy: energy || undefined,
+        notes: notes || undefined,
+        source: 'mood_popup',
       });
 
-      // Mark mood as logged today
-      localStorage.setItem('nirvami_mood_logged_today', new Date().toISOString().split('T')[0]);
-      
-      onMoodSubmitted();
-      onClose();
-      
-      // Reset form
-      setSelectedMood(null);
-      setIntensity(5);
-      setNote('');
-    } catch (error) {
+      if (response.ok) {
+        toast.success('Mood saved successfully!');
+        onMoodSubmitted();
+        onClose();
+        
+        // Reset form
+        setSelectedMood(null);
+        setIntensity(5);
+        setEnergy(null);
+        setNotes('');
+      } else {
+        toast.error(response.detail || 'Failed to save mood');
+      }
+    } catch (error: any) {
       console.error('Failed to log mood:', error);
-      alert('Failed to log mood. Please try again.');
+      const errorMessage = error.response?.data?.detail || error.message || 'Failed to log mood. Please try again.';
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -97,7 +113,7 @@ export function MoodInputPopup({ isOpen, onClose, onMoodSubmitted }: MoodInputPo
             </div>
           </div>
 
-          {/* Intensity Slider */}
+          {/* Intensity Slider - Required */}
           {selectedMood && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
@@ -106,7 +122,7 @@ export function MoodInputPopup({ isOpen, onClose, onMoodSubmitted }: MoodInputPo
             >
               <div className="flex items-center justify-between">
                 <label className="text-sm font-medium text-gray-700">
-                  Intensity
+                  Intensity <span className="text-red-500">*</span>
                 </label>
                 <span className="text-sm font-semibold text-purple-600">
                   {intensity}/10
@@ -123,13 +139,56 @@ export function MoodInputPopup({ isOpen, onClose, onMoodSubmitted }: MoodInputPo
                   onChange={(e) => setIntensity(Number(e.target.value))}
                   className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
                   aria-label="Mood intensity slider"
+                  required
                 />
                 <ThumbsUp className="w-5 h-5 text-gray-400" />
               </div>
             </motion.div>
           )}
 
-          {/* Optional Note */}
+          {/* Optional Energy Slider */}
+          {selectedMood && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.05 }}
+              className="space-y-3"
+            >
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium text-gray-700">
+                  Energy Level (optional)
+                </label>
+                {energy !== null && (
+                  <span className="text-sm font-semibold text-purple-600">
+                    {energy}/10
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-4">
+                <ThumbsDown className="w-5 h-5 text-gray-400" />
+                <input
+                  id="energy-slider"
+                  type="range"
+                  min="1"
+                  max="10"
+                  value={energy || 5}
+                  onChange={(e) => setEnergy(Number(e.target.value))}
+                  className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                  aria-label="Energy level slider"
+                />
+                <ThumbsUp className="w-5 h-5 text-gray-400" />
+              </div>
+              <button
+                type="button"
+                onClick={() => setEnergy(null)}
+                className="text-xs text-gray-500 hover:text-gray-700 underline"
+              >
+                Clear energy level
+              </button>
+            </motion.div>
+          )}
+
+          {/* Optional Notes */}
           {selectedMood && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
@@ -141,8 +200,8 @@ export function MoodInputPopup({ isOpen, onClose, onMoodSubmitted }: MoodInputPo
                 Add a note (optional)
               </label>
               <textarea
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
                 placeholder="What's on your mind?"
                 rows={3}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none resize-none"
@@ -162,8 +221,8 @@ export function MoodInputPopup({ isOpen, onClose, onMoodSubmitted }: MoodInputPo
             </Button>
             <Button
               onClick={handleSubmit}
-              disabled={!selectedMood || loading}
-              className="flex-1 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600"
+              disabled={!selectedMood || !intensity || loading}
+              className="flex-1 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? (
                 <span className="flex items-center gap-2">
@@ -171,7 +230,7 @@ export function MoodInputPopup({ isOpen, onClose, onMoodSubmitted }: MoodInputPo
                   Saving...
                 </span>
               ) : (
-                'Submit Mood'
+                'Save Mood'
               )}
             </Button>
           </div>

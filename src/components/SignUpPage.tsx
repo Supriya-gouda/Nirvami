@@ -21,10 +21,11 @@ export function SignUpPage({ onSignUp, onNavigateToSignIn }: SignUpPageProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [accountCreated, setAccountCreated] = useState(false);
 
   const getPasswordStrength = () => {
     if (!password) return { strength: 0, label: '', color: '' };
-    
+
     let strength = 0;
     if (password.length >= 6) strength += 1;
     if (password.length >= 10) strength += 1;
@@ -34,10 +35,10 @@ export function SignUpPage({ onSignUp, onNavigateToSignIn }: SignUpPageProps) {
 
     const labels = ['', 'Weak', 'Fair', 'Good', 'Strong', 'Very Strong'];
     const colors = ['', 'bg-red-500', 'bg-orange-500', 'bg-yellow-500', 'bg-green-500', 'bg-emerald-500'];
-    
-    return { 
-      strength, 
-      label: labels[strength], 
+
+    return {
+      strength,
+      label: labels[strength],
       color: colors[strength],
       percentage: (strength / 5) * 100
     };
@@ -61,6 +62,12 @@ export function SignUpPage({ onSignUp, onNavigateToSignIn }: SignUpPageProps) {
       return;
     }
 
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      setError('Please enter a valid email address');
+      return;
+    }
+
     if (password !== confirmPassword) {
       setError('Passwords do not match');
       return;
@@ -76,21 +83,44 @@ export function SignUpPage({ onSignUp, onNavigateToSignIn }: SignUpPageProps) {
     try {
       await register(name.trim(), email.trim(), password);
       setSuccess(true);
-      
-      // Small delay to show success message
+      setAccountCreated(true);
+
+      // Redirect to dashboard after brief delay
       setTimeout(() => {
         onSignUp();
-      }, 1000);
+      }, 1500);
     } catch (err: any) {
       console.error('Registration error:', err);
-      const errorMsg = err.response?.data?.detail || err.message || 'Registration failed. Email might already be in use.';
       
-      if (errorMsg.includes('Account created successfully') || errorMsg.includes('SMTP not configured')) {
+      let errorMsg = 'Registration failed. Please try again.';
+      
+      // Handle different error types
+      if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
+        errorMsg = 'Server is taking too long. Please wait a moment and try again.';
+      } else if (err.response?.status === 400) {
+        errorMsg = err.response.data?.detail || 'Invalid registration data.';
+      } else if (err.response?.status === 201) {
+        // Account created but auto-login failed
         setAccountCreated(true);
-        setError(errorMsg);
-      } else {
-        setError(errorMsg);
+        errorMsg = 'Account created successfully! Redirecting to sign in...';
+        setTimeout(() => {
+          onNavigateToSignIn();
+        }, 2000);
+        return;
+      } else if (err.response?.data?.detail) {
+        errorMsg = err.response.data.detail;
+      } else if (err.message) {
+        errorMsg = err.message;
       }
+
+      // Check if account was actually created
+      if (errorMsg.toLowerCase().includes('created successfully') || 
+          errorMsg.toLowerCase().includes('please sign in')) {
+        setAccountCreated(true);
+        setSuccess(true);
+      }
+      
+      setError(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -102,7 +132,7 @@ export function SignUpPage({ onSignUp, onNavigateToSignIn }: SignUpPageProps) {
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <motion.div
           className="absolute top-20 left-20 w-72 h-72 bg-purple-200/30 rounded-full blur-3xl"
-          animate={{ 
+          animate={{
             scale: [1, 1.2, 1],
             x: [0, 50, 0],
             y: [0, 30, 0]
@@ -111,7 +141,7 @@ export function SignUpPage({ onSignUp, onNavigateToSignIn }: SignUpPageProps) {
         />
         <motion.div
           className="absolute bottom-20 right-20 w-96 h-96 bg-blue-200/30 rounded-full blur-3xl"
-          animate={{ 
+          animate={{
             scale: [1, 1.3, 1],
             x: [0, -30, 0],
             y: [0, -50, 0]
@@ -126,16 +156,16 @@ export function SignUpPage({ onSignUp, onNavigateToSignIn }: SignUpPageProps) {
         className="w-full max-w-md relative z-10"
       >
         <div className="text-center mb-8">
-          <motion.div 
+          <motion.div
             className="flex items-center justify-center mb-4"
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
             transition={{ type: "spring", stiffness: 200, damping: 10 }}
           >
             <div className="relative">
-              <img 
-                src="/src/assets/34629939463a62914e4d6cf8617751092b770df0.png" 
-                alt="Nirvami" 
+              <img
+                src="/src/assets/34629939463a62914e4d6cf8617751092b770df0.png"
+                alt="Nirvami"
                 className="w-20 h-20 relative z-10"
               />
               <motion.div
@@ -145,7 +175,7 @@ export function SignUpPage({ onSignUp, onNavigateToSignIn }: SignUpPageProps) {
               />
             </div>
           </motion.div>
-          <motion.h1 
+          <motion.h1
             className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent mb-2"
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -153,7 +183,7 @@ export function SignUpPage({ onSignUp, onNavigateToSignIn }: SignUpPageProps) {
           >
             Join Nirvami
           </motion.h1>
-          <motion.p 
+          <motion.p
             className="text-gray-600 flex items-center justify-center gap-2"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -277,7 +307,7 @@ export function SignUpPage({ onSignUp, onNavigateToSignIn }: SignUpPageProps) {
                       {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                     </button>
                   </div>
-                  
+
                   {/* Password strength indicator */}
                   {password && (
                     <motion.div
@@ -287,12 +317,11 @@ export function SignUpPage({ onSignUp, onNavigateToSignIn }: SignUpPageProps) {
                     >
                       <div className="flex items-center justify-between text-xs">
                         <span className="text-gray-600">Password strength:</span>
-                        <span className={`font-medium ${
-                          passwordStrength.strength <= 1 ? 'text-red-600' :
-                          passwordStrength.strength <= 2 ? 'text-orange-600' :
-                          passwordStrength.strength <= 3 ? 'text-yellow-600' :
-                          'text-green-600'
-                        }`}>
+                        <span className={`font-medium ${passwordStrength.strength <= 1 ? 'text-red-600' :
+                            passwordStrength.strength <= 2 ? 'text-orange-600' :
+                              passwordStrength.strength <= 3 ? 'text-yellow-600' :
+                                'text-green-600'
+                          }`}>
                           {passwordStrength.label}
                         </span>
                       </div>
@@ -331,7 +360,7 @@ export function SignUpPage({ onSignUp, onNavigateToSignIn }: SignUpPageProps) {
                       {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                     </button>
                   </div>
-                  
+
                   {/* Password match indicator */}
                   {confirmPassword && (
                     <motion.div

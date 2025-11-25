@@ -28,24 +28,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const initAuth = async () => {
       const token = localStorage.getItem('nirvami_auth_token');
+      const cachedUser = localStorage.getItem('nirvami_user');
       
       if (!token) {
         setIsLoading(false);
         return;
       }
 
+      // Use cached user data immediately for faster load
+      if (cachedUser) {
+        try {
+          const parsed = JSON.parse(cachedUser);
+          setUser(parsed);
+          setIsLoading(false);
+          
+          // Verify token in background (non-blocking)
+          api.getCurrentUser().catch((error) => {
+            console.error('Background token validation failed:', error);
+            localStorage.removeItem('nirvami_auth_token');
+            localStorage.removeItem('nirvami_user');
+            setUser(null);
+          });
+          return;
+        } catch (e) {
+          console.error('Invalid cached user data:', e);
+        }
+      }
+
+      // No cached user - fetch from backend
       try {
-        // Verify token and get user data from backend
         const userData = await api.getCurrentUser();
-        setUser({
+        const userObj = {
           id: userData.id,
-          name: userData.name || userData.email.split('@')[0],
+          name: userData.full_name || userData.email.split('@')[0],
           email: userData.email,
           isGuest: false
-        });
+        };
+        setUser(userObj);
+        localStorage.setItem('nirvami_user', JSON.stringify(userObj));
       } catch (error) {
         console.error('Token validation failed:', error);
-        // Invalid token - clear it
         localStorage.removeItem('nirvami_auth_token');
         localStorage.removeItem('nirvami_user');
       } finally {
@@ -58,18 +80,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string) => {
     try {
-      const response = await api.login({ email, password });
+      // Use Supabase directly for faster login
+      const response = await api.loginWithSupabase({ email, password });
       
       // Store token
       localStorage.setItem('nirvami_auth_token', response.access_token);
       
       // Set user from response
-      setUser({
+      const userObj = {
         id: response.user.id,
-        name: response.user.name || email.split('@')[0],
+        name: response.user.full_name || email.split('@')[0],
         email: response.user.email,
         isGuest: false
-      });
+      };
+      setUser(userObj);
+      
+      // Cache user for faster subsequent loads
+      localStorage.setItem('nirvami_user', JSON.stringify(userObj));
     } catch (error) {
       console.error('Login failed:', error);
       throw error;
@@ -78,18 +105,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const register = async (name: string, email: string, password: string) => {
     try {
-      const response = await api.register({ name, email, password });
+      const response = await api.register({ full_name: name, email, password });
+      
+      console.log('Registration response:', response);
       
       // Store token
       localStorage.setItem('nirvami_auth_token', response.access_token);
       
-      // Set user from response
-      setUser({
+      // Set user from response - handle if user is undefined
+      if (!response.user) {
+        throw new Error('Invalid response from server - user data missing');
+      }
+      
+      const userObj = {
         id: response.user.id,
-        name: response.user.name || name,
+        name: response.user.full_name || response.user.email?.split('@')[0] || name,
         email: response.user.email,
         isGuest: false
-      });
+      };
+      setUser(userObj);
+      
+      // Cache user for faster subsequent loads
+      localStorage.setItem('nirvami_user', JSON.stringify(userObj));
     } catch (error) {
       console.error('Registration failed:', error);
       throw error;
@@ -105,12 +142,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshUser = async () => {
     try {
       const userData = await api.getCurrentUser();
-      setUser({
+      const userObj = {
         id: userData.id,
-        name: userData.name || userData.email.split('@')[0],
+        name: userData.full_name || userData.email.split('@')[0],
         email: userData.email,
         isGuest: false
-      });
+      };
+      setUser(userObj);
+      localStorage.setItem('nirvami_user', JSON.stringify(userObj));
     } catch (error) {
       console.error('Failed to refresh user:', error);
       logout();

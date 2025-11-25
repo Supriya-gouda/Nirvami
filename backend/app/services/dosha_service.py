@@ -1,8 +1,9 @@
 """Dosha assessment service."""
-from typing import Dict
+from typing import Dict, List
 import uuid
 from datetime import datetime
 import logging
+from app.models.schemas import DoshaAnswer
 
 logger = logging.getLogger(__name__)
 
@@ -10,7 +11,79 @@ logger = logging.getLogger(__name__)
 class DoshaService:
     """Service for dosha assessment and Ayurvedic recommendations."""
     
-    # Dosha assessment logic based on quiz responses
+    # Question ID to Dosha mapping based on frontend quiz structure
+    # Questions 1, 4, 7, 10 are Vata-focused
+    # Questions 2, 5, 8 are Pitta-focused  
+    # Questions 3, 6, 9 are Kapha-focused
+    QUESTION_DOSHA_MAP = {
+        1: "vata",   # body frame
+        2: "pitta",  # skin type
+        3: "kapha",  # appetite
+        4: "vata",   # stress handling
+        5: "pitta",  # sleep pattern
+        6: "kapha",  # energy levels
+        7: "vata",   # body temperature
+        8: "pitta",  # learning style
+        9: "kapha",  # digestion
+        10: "vata"   # decision making
+    }
+    
+    @staticmethod
+    def calculate_scores(answers: List[DoshaAnswer]) -> dict:
+        """
+        Calculate dosha scores from quiz answers.
+        
+        Args:
+            answers: List of DoshaAnswer objects with question_id and answer_value
+            
+        Returns:
+            Dictionary with vata_score, pitta_score, kapha_score, dominant_dosha
+        """
+        vata_score = 0
+        pitta_score = 0
+        kapha_score = 0
+        
+        # Sum up scores based on question-to-dosha mapping
+        for answer in answers:
+            question_id = answer.question_id
+            score_value = answer.answer_value
+            
+            # Map question to dosha category
+            dosha_category = DoshaService.QUESTION_DOSHA_MAP.get(question_id)
+            
+            if dosha_category == "vata":
+                vata_score += score_value
+            elif dosha_category == "pitta":
+                pitta_score += score_value
+            elif dosha_category == "kapha":
+                kapha_score += score_value
+        
+        # Determine dominant dosha
+        scores = {
+            "vata": vata_score,
+            "pitta": pitta_score,
+            "kapha": kapha_score
+        }
+        dominant_dosha = max(scores, key=scores.get)
+        
+        # Determine secondary dosha (if score is within 20% of dominant)
+        sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+        secondary_dosha = None
+        if len(sorted_scores) > 1:
+            threshold = sorted_scores[0][1] * 0.8
+            if sorted_scores[1][1] >= threshold:
+                secondary_dosha = sorted_scores[1][0]
+        
+        return {
+            "vata_score": vata_score,
+            "pitta_score": pitta_score,
+            "kapha_score": kapha_score,
+            "dominant_dosha": dominant_dosha,
+            "primary_dosha": dominant_dosha,
+            "secondary_dosha": secondary_dosha
+        }
+    
+    # Legacy indicators for backward compatibility
     VATA_INDICATORS = ["thin", "dry_skin", "anxious", "creative", "cold", "irregular"]
     PITTA_INDICATORS = ["medium_build", "warm", "competitive", "focused", "irritable", "oily_skin"]
     KAPHA_INDICATORS = ["heavy_build", "calm", "steady", "slow", "cool", "thick_skin"]
@@ -141,83 +214,59 @@ class DoshaService:
             logger.error(f"Error getting recommendations: {e}")
             raise
     
-    def _get_diet_recommendations(self, dosha_type: str) -> list:
-        """Get diet recommendations for dosha type."""
-        primary = dosha_type.split("-")[0]
+    @staticmethod
+    def get_diet_recommendations(dosha_type: str, supabase) -> list:
+        """Get diet recommendations from database."""
+        primary = dosha_type.split("-")[0].lower()
         
-        recommendations = {
-            "vata": [
-                "Favor warm, cooked foods",
-                "Include healthy fats like ghee and sesame oil",
-                "Eat sweet fruits like bananas and avocados",
-                "Avoid cold, raw, and dry foods"
-            ],
-            "pitta": [
-                "Choose cooling foods like cucumber and coconut",
-                "Favor sweet, bitter, and astringent tastes",
-                "Avoid spicy, salty, and sour foods",
-                "Include mint, cilantro, and fennel"
-            ],
-            "kapha": [
-                "Eat light, warm, and dry foods",
-                "Include spices like ginger, black pepper, and turmeric",
-                "Favor bitter and astringent vegetables",
-                "Reduce heavy, oily, and sweet foods"
-            ]
-        }
-        
-        return recommendations.get(primary, recommendations["vata"])
+        try:
+            result = supabase.table("ayurveda_resources")\
+                .select("content")\
+                .eq("category", "diet")\
+                .contains("dosha_tags", [primary])\
+                .execute()
+            
+            if result.data:
+                return [item["content"] for item in result.data]
+            return []
+        except Exception as e:
+            logger.error(f"Error fetching diet recommendations: {e}")
+            return []
     
-    def _get_lifestyle_recommendations(self, dosha_type: str) -> list:
-        """Get lifestyle recommendations."""
-        primary = dosha_type.split("-")[0]
+    @staticmethod
+    def get_lifestyle_recommendations(dosha_type: str, supabase) -> list:
+        """Get lifestyle recommendations from database."""
+        primary = dosha_type.split("-")[0].lower()
         
-        recommendations = {
-            "vata": [
-                "Maintain a regular daily routine",
-                "Practice grounding activities like meditation",
-                "Get adequate rest and sleep",
-                "Stay warm and avoid cold, windy conditions"
-            ],
-            "pitta": [
-                "Practice cooling pranayama",
-                "Avoid excessive heat and sun exposure",
-                "Engage in moderate exercise",
-                "Cultivate patience and relaxation"
-            ],
-            "kapha": [
-                "Stay active with regular exercise",
-                "Wake up early and avoid daytime naps",
-                "Seek variety and stimulation",
-                "Practice energizing breathwork"
-            ]
-        }
-        
-        return recommendations.get(primary, recommendations["vata"])
+        try:
+            result = supabase.table("ayurveda_resources")\
+                .select("content")\
+                .eq("category", "lifestyle")\
+                .contains("dosha_tags", [primary])\
+                .execute()
+            
+            if result.data:
+                return [item["content"] for item in result.data]
+            return []
+        except Exception as e:
+            logger.error(f"Error fetching lifestyle recommendations: {e}")
+            return []
     
-    def _get_yoga_recommendations(self, dosha_type: str) -> list:
-        """Get yoga recommendations."""
-        primary = dosha_type.split("-")[0]
+    @staticmethod
+    def get_yoga_recommendations(dosha_type: str, supabase) -> list:
+        """Get yoga recommendations from database."""
+        primary = dosha_type.split("-")[0].lower()
         
-        recommendations = {
-            "vata": [
-                "Grounding poses like Mountain Pose and Tree Pose",
-                "Slow, gentle flows",
-                "Forward bends for calming",
-                "Restorative yoga"
-            ],
-            "pitta": [
-                "Cooling poses like forward folds",
-                "Avoid intense inversions",
-                "Practice with mindfulness and ease",
-                "Include twists for detoxification"
-            ],
-            "kapha": [
-                "Energizing poses like Sun Salutations",
-                "Backbends for opening",
-                "Dynamic, flowing sequences",
-                "Challenging balances"
-            ]
-        }
-        
-        return recommendations.get(primary, recommendations["vata"])
+        try:
+            result = supabase.table("ayurveda_resources")\
+                .select("content")\
+                .eq("category", "yoga")\
+                .contains("dosha_tags", [primary])\
+                .execute()
+            
+            if result.data:
+                return [item["content"] for item in result.data]
+            return []
+        except Exception as e:
+            logger.error(f"Error fetching yoga recommendations: {e}")
+            return []

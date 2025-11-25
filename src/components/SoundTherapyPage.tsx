@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Music, Play, Pause, Volume2, Sparkles, Wind, Heart, Zap } from 'lucide-react';
 import { Navigation } from './Navigation';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Slider } from './ui/slider';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import api from '../services/api';
 import type { PageType, User } from '../App';
 
 interface SoundTherapyPageProps {
@@ -29,8 +30,49 @@ export function SoundTherapyPage({ user, onNavigate }: SoundTherapyPageProps) {
   const [selectedMood, setSelectedMood] = useState<string>('calm');
   const [playingTrack, setPlayingTrack] = useState<string | null>(null);
   const [volume, setVolume] = useState([70]);
+  const [soundTracks, setSoundTracks] = useState<SoundTrack[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const soundTracks: SoundTrack[] = [
+  // Fetch sound tracks on mount and when dosha changes
+  useEffect(() => {
+    const loadSoundTracks = async () => {
+      setIsLoading(true);
+      try {
+        // Fetch from API
+        const doshaFilter = selectedDosha === 'All' ? undefined : selectedDosha.toLowerCase();
+        const response = await api.getSoundTracks({ dosha: doshaFilter }).catch(() => ({ success: false, tracks: [] }));
+        
+        if (response.success && response.tracks && response.tracks.length > 0) {
+          // Transform database tracks to component format
+          const transformedTracks = response.tracks.map((track: any) => ({
+            id: track.id,
+            title: track.title,
+            duration: `${track.duration_minutes}:00`,
+            dosha: selectedDosha,
+            mood: track.emotion_tags || [],
+            frequency: track.frequency_hz ? `${track.frequency_hz} Hz` : '432 Hz',
+            description: track.description || '',
+            icon: track.icon || '🎵',
+            gradient: track.thumbnail_gradient || 'from-purple-400 to-pink-400',
+          }));
+          setSoundTracks(transformedTracks);
+        } else {
+          // Fallback to hardcoded tracks if API returns empty
+          setSoundTracks(getDefaultSoundTracks());
+        }
+      } catch (err) {
+        console.warn('Failed to load sound tracks from API, using fallback', err);
+        setSoundTracks(getDefaultSoundTracks());
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadSoundTracks();
+  }, [selectedDosha]);
+
+  // Fallback data function
+  const getDefaultSoundTracks = (): SoundTrack[] => [
     {
       id: '1',
       title: 'Ocean Waves & Tibetan Bowls',

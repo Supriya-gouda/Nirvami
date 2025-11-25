@@ -127,7 +127,7 @@ class GeminiChatbot:
                 gemini_history = []
                 last_role = None
                 
-                for msg in chat_history[-10:]:  # Last 10 messages for context
+                for msg in chat_history[-20:]:  # Last 20 messages for context (increased from 10)
                     role = "user" if msg.get("role") == "user" else "model"
                     content = msg.get("content", "")
                     

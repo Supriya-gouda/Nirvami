@@ -169,28 +169,20 @@ export function DoshaQuizPage({ user, onNavigate, onLogout, onOpenNotifications 
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
-      // Calculate dosha scores
-      let vataScore = 0;
-      let pittaScore = 0;
-      let kaphaScore = 0;
-
-      questions.forEach((q) => {
+      // Transform answers to backend format: {question_id, answer_value}[]
+      const formattedAnswers = questions.map((q, index) => {
         const answerIndex = parseInt(answers[q.id] || '0');
         const selectedOption = q.options[answerIndex];
         
-        if (selectedOption.dosha === 'vata') vataScore += selectedOption.score;
-        else if (selectedOption.dosha === 'pitta') pittaScore += selectedOption.score;
-        else if (selectedOption.dosha === 'kapha') kaphaScore += selectedOption.score;
+        return {
+          question_id: index + 1, // 1-based question ID
+          answer_value: selectedOption.score
+        };
       });
 
       // Submit to backend
       const doshaResult = await api.submitDoshaAssessment({
-        answers: {
-          ...answers,
-          vata_score: vataScore,
-          pitta_score: pittaScore,
-          kapha_score: kaphaScore
-        }
+        answers: formattedAnswers
       });
 
       // Get recommendations

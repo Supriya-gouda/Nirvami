@@ -49,6 +49,10 @@ export function LogPage({ user, onNavigate, onLogout, onOpenNotifications }: Log
   const [sleepHours, setSleepHours] = useState('7');
   const [additionalNotes, setAdditionalNotes] = useState('');
 
+  // Daily routine state
+  const [routineTime, setRoutineTime] = useState('');
+  const [routineActivity, setRoutineActivity] = useState('');
+
   const moods = [
     { emoji: '😊', label: 'Happy' },
     { emoji: '😌', label: 'Calm' },
@@ -152,21 +156,7 @@ export function LogPage({ user, onNavigate, onLogout, onOpenNotifications }: Log
       timestamp: Date.now()
     };
 
-    // Get existing logs from localStorage
-    const existingLogsStr = localStorage.getItem('nirvami_daily_logs');
-    let existingLogs: Record<string, DailyLog> = {};
-    try {
-      existingLogs = existingLogsStr && existingLogsStr !== 'undefined' ? JSON.parse(existingLogsStr) : {};
-    } catch (e) {
-      console.error('Failed to parse existing logs:', e);
-      existingLogs = {};
-    }
-
-    // Save log for today
-    existingLogs[dateStr] = logEntry;
-    localStorage.setItem('nirvami_daily_logs', JSON.stringify(existingLogs));
-
-    // Also log emotion and meals to backend
+    // Log all data to backend (no localStorage)
     try {
       // Log emotion if mood is selected
       if (selectedMood && logEntry.moodLabel) {
@@ -196,6 +186,15 @@ export function LogPage({ user, onNavigate, onLogout, onOpenNotifications }: Log
         });
       }
 
+      // Log daily routine if provided
+      if (routineTime && routineActivity.trim()) {
+        await api.post('/routines/entry', {
+          date: dateStr,
+          time: routineTime,
+          activity: routineActivity.trim()
+        });
+      }
+
       toast.success('Daily log saved successfully!');
     } catch (err) {
       console.warn('Failed to sync with backend, saved locally', err);
@@ -208,30 +207,14 @@ export function LogPage({ user, onNavigate, onLogout, onOpenNotifications }: Log
     setEnergyLevel([60]);
     setSleepHours('7');
     setAdditionalNotes('');
+    setRoutineTime('');
+    setRoutineActivity('');
   };
 
-  // Get log for a specific date (merges backend and localStorage)
+  // Get log for a specific date (from backend only)
   const getLogForDate = (dateStr: string): DailyLog | null => {
-    // Check backend logs first
-    const backendLog = backendLogs[dateStr];
-
-    // Check localStorage
-    const logsStr = localStorage.getItem('nirvami_daily_logs');
-    let localLog: DailyLog | null = null;
-    if (logsStr && logsStr !== 'undefined') {
-      try {
-        const logs = JSON.parse(logsStr);
-        localLog = logs[dateStr] || null;
-      } catch (e) {
-        console.error('Failed to parse logs for date:', e);
-      }
-    }
-
-    // Merge backend and local (local overrides backend if more recent)
-    if (backendLog && localLog) {
-      return localLog.timestamp > backendLog.timestamp ? localLog : backendLog;
-    }
-    return backendLog || localLog;
+    // Use backend logs only
+    return backendLogs[dateStr] || null;
   };
 
   // Check if a date has a log
@@ -469,6 +452,40 @@ export function LogPage({ user, onNavigate, onLogout, onOpenNotifications }: Log
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Daily Routine */}
+          <div className="relative bg-white/40 backdrop-blur-xl rounded-3xl p-6 border border-white/50 shadow-xl">
+            <h2 className="text-xl text-gray-800 mb-6">Daily Routine Activity</h2>
+
+            <div className="grid md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm text-gray-700 mb-3 block">
+                  Time
+                </label>
+                <Input
+                  type="time"
+                  value={routineTime}
+                  onChange={(e) => setRoutineTime(e.target.value)}
+                  className="bg-white/60 backdrop-blur-sm border-white/50"
+                />
+              </div>
+              <div>
+                <label className="text-sm text-gray-700 mb-3 block">
+                  Activity
+                </label>
+                <Input
+                  type="text"
+                  value={routineActivity}
+                  onChange={(e) => setRoutineActivity(e.target.value)}
+                  placeholder="e.g., Morning meditation, Evening walk"
+                  className="bg-white/60 backdrop-blur-sm border-white/50"
+                />
+              </div>
+            </div>
+            <p className="text-xs text-gray-500 mt-2">
+              Optional: Log a specific activity from your daily routine
+            </p>
           </div>
 
           {/* Additional Notes */}

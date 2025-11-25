@@ -1,7 +1,6 @@
 """Aura visualization routes."""
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from app.utils.auth import get_current_user_id
-from app.utils.mock_data import get_mock_aura
 from app.models.schemas import AuraEntry
 from app.services.aura_service import AuraService
 from app.utils.database import get_supabase
@@ -18,7 +17,7 @@ router = APIRouter()
 async def get_today_aura(
     current_user_id: str = Depends(get_current_user_id)
 ):
-    """Get today's aura."""
+    """Get today's aura - generates from emotions if not exists."""
     try:
         supabase = get_supabase()
         
@@ -37,9 +36,7 @@ async def get_today_aura(
         
     except Exception as e:
         logger.error(f"Error fetching today's aura: {e}")
-        # Only return mock if there's a critical error
-        logger.warning("Returning mock aura due to error")
-        return get_mock_aura()
+        raise HTTPException(status_code=500, detail=f"Failed to fetch aura: {str(e)}")
 
 
 @router.post("/generate")
@@ -57,8 +54,7 @@ async def generate_aura(
         return aura_data
     except Exception as e:
         logger.error(f"Error generating aura: {e}")
-        # Return mock aura as fallback
-        return get_mock_aura()
+        raise HTTPException(status_code=500, detail=f"Failed to generate aura: {str(e)}")
 
 
 @router.get("/timeline", response_model=List[AuraEntry])

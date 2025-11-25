@@ -221,7 +221,15 @@ export function AuraVisualizationPage({ user, onNavigate, onLogout, onOpenNotifi
           animate={{ opacity: 1, y: 0 }}
           className="mb-8"
         >
-          <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+          <h1 
+            className="text-4xl font-bold mb-2"
+            style={{
+              background: 'linear-gradient(to right, #9333ea, #db2777)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+            }}
+          >
             Aura Visualization
           </h1>
           <p className="text-gray-600">Your energetic signature and emotional state</p>
@@ -234,13 +242,55 @@ export function AuraVisualizationPage({ user, onNavigate, onLogout, onOpenNotifi
           transition={{ delay: 0.1 }}
           className="mb-8"
         >
-          <Card className={`bg-gradient-to-br ${currentAuraColor.gradient} text-white border-none shadow-2xl overflow-hidden`}>
+          <Card 
+            className="text-white border-none shadow-2xl overflow-hidden"
+            style={{
+              background: (() => {
+                const gradientMap: Record<string, string> = {
+                  'from-red-400 via-red-500 to-red-600': 'linear-gradient(135deg, #f87171, #ef4444, #dc2626)',
+                  'from-orange-400 via-orange-500 to-orange-600': 'linear-gradient(135deg, #fb923c, #f97316, #ea580c)',
+                  'from-yellow-300 via-yellow-400 to-yellow-500': 'linear-gradient(135deg, #fde047, #facc15, #eab308)',
+                  'from-yellow-400 via-yellow-500 to-yellow-600': 'linear-gradient(135deg, #facc15, #eab308, #ca8a04)',
+                  'from-green-400 via-green-500 to-green-600': 'linear-gradient(135deg, #4ade80, #22c55e, #16a34a)',
+                  'from-blue-400 via-blue-500 to-blue-600': 'linear-gradient(135deg, #60a5fa, #3b82f6, #2563eb)',
+                  'from-teal-400 via-teal-500 to-teal-600': 'linear-gradient(135deg, #2dd4bf, #14b8a6, #0d9488)',
+                  'from-indigo-400 via-indigo-500 to-indigo-600': 'linear-gradient(135deg, #818cf8, #6366f1, #4f46e5)',
+                  'from-violet-400 via-violet-500 to-violet-600': 'linear-gradient(135deg, #a78bfa, #8b5cf6, #7c3aed)',
+                  'from-pink-400 via-pink-500 to-pink-600': 'linear-gradient(135deg, #f472b6, #ec4899, #db2777)',
+                  'from-gray-100 via-white to-gray-200': 'linear-gradient(135deg, #f3f4f6, #ffffff, #e5e7eb)',
+                  'from-gray-400 via-gray-500 to-gray-600': 'linear-gradient(135deg, #9ca3af, #6b7280, #4b5563)',
+                  'from-gray-300 via-gray-400 to-gray-500': 'linear-gradient(135deg, #d1d5db, #9ca3af, #6b7280)',
+                };
+                return gradientMap[currentAuraColor.gradient] || 'linear-gradient(135deg, #9ca3af, #6b7280)';
+              })(),
+            }}
+          >
             <CardContent className="p-8">
               <div className="flex flex-col md:flex-row items-center gap-8">
                 {/* Aura Visualization Circle */}
                 <div className="relative">
                   <motion.div
-                    className={`w-64 h-64 rounded-full bg-gradient-to-br ${currentAuraColor.innerGlow} shadow-2xl relative`}
+                    className="w-64 h-64 rounded-full shadow-2xl relative"
+                    style={{
+                      background: (() => {
+                        const innerGlowMap: Record<string, string> = {
+                          'from-red-500 to-red-700': 'linear-gradient(135deg, #ef4444, #b91c1c)',
+                          'from-orange-500 to-orange-700': 'linear-gradient(135deg, #f97316, #c2410c)',
+                          'from-yellow-400 to-yellow-600': 'linear-gradient(135deg, #facc15, #ca8a04)',
+                          'from-yellow-500 to-yellow-700': 'linear-gradient(135deg, #eab308, #a16207)',
+                          'from-green-500 to-green-700': 'linear-gradient(135deg, #22c55e, #15803d)',
+                          'from-blue-500 to-blue-700': 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
+                          'from-teal-500 to-teal-700': 'linear-gradient(135deg, #14b8a6, #0f766e)',
+                          'from-indigo-500 to-indigo-700': 'linear-gradient(135deg, #6366f1, #4338ca)',
+                          'from-violet-500 to-violet-700': 'linear-gradient(135deg, #8b5cf6, #6d28d9)',
+                          'from-pink-500 to-pink-700': 'linear-gradient(135deg, #ec4899, #be185d)',
+                          'from-gray-200 to-gray-400': 'linear-gradient(135deg, #e5e7eb, #9ca3af)',
+                          'from-gray-500 to-gray-700': 'linear-gradient(135deg, #6b7280, #374151)',
+                          'from-gray-400 to-gray-600': 'linear-gradient(135deg, #9ca3af, #4b5563)',
+                        };
+                        return innerGlowMap[currentAuraColor.innerGlow] || 'linear-gradient(135deg, #6b7280, #374151)';
+                      })(),
+                    }}
                     animate={{
                       boxShadow: [
                         `0 0 60px ${currentAuraColor.color}`,
@@ -288,9 +338,23 @@ export function AuraVisualizationPage({ user, onNavigate, onLogout, onOpenNotifi
                     <p className="text-sm opacity-80 mb-2">Dominant Traits</p>
                     <div className="flex flex-wrap gap-2">
                       {currentAuraColor.traits.map((trait, idx) => (
-                        <Badge key={idx} variant="secondary" className="bg-white/30 text-white border-white/50">
+                        <span
+                          key={idx}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            padding: '4px 8px',
+                            fontSize: '12px',
+                            fontWeight: '500',
+                            borderRadius: '6px',
+                            backgroundColor: currentAuraColor.name === 'White' ? 'rgba(31, 41, 55, 0.2)' : 'rgba(255, 255, 255, 0.3)',
+                            color: currentAuraColor.name === 'White' ? '#1f2937' : 'white',
+                            border: currentAuraColor.name === 'White' ? '1px solid rgba(31, 41, 55, 0.3)' : '1px solid rgba(255, 255, 255, 0.5)',
+                          }}
+                        >
                           {trait}
-                        </Badge>
+                        </span>
                       ))}
                     </div>
                   </div>
@@ -303,6 +367,34 @@ export function AuraVisualizationPage({ user, onNavigate, onLogout, onOpenNotifi
                       <strong>Element:</strong> {currentAuraColor.element}
                     </div>
                   </div>
+
+                  {/* Emotion Basis */}
+                  {currentAura?.emotion_basis && Object.keys(currentAura.emotion_basis).length > 0 && (
+                    <div className="mt-6">
+                      <p className="text-sm opacity-80 mb-2">Emotional Influences</p>
+                      <div className="space-y-2">
+                        {Object.entries(currentAura.emotion_basis)
+                          .sort(([, a], [, b]) => (b as number) - (a as number))
+                          .slice(0, 5)
+                          .map(([emotion, value], idx) => (
+                            <div key={emotion} className="bg-white/20 backdrop-blur-sm rounded-lg p-2">
+                              <div className="flex justify-between items-center mb-1">
+                                <span className="text-sm capitalize">{emotion}</span>
+                                <span className="text-sm font-semibold">{Math.round((value as number) * 100)}%</span>
+                              </div>
+                              <div className="h-1.5 bg-white/30 rounded-full overflow-hidden">
+                                <motion.div
+                                  className="h-full bg-white"
+                                  initial={{ width: 0 }}
+                                  animate={{ width: `${(value as number) * 100}%` }}
+                                  transition={{ duration: 0.8, delay: 0.3 + idx * 0.1 }}
+                                />
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </CardContent>
@@ -324,16 +416,49 @@ export function AuraVisualizationPage({ user, onNavigate, onLogout, onOpenNotifi
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
                 {Object.values(auraColors).map((auraColor, idx) => {
                   const ColorIcon = auraColor.icon;
+                  const getGradient = (gradientClass: string) => {
+                    const gradientMap: Record<string, string> = {
+                      'from-red-400 via-red-500 to-red-600': 'linear-gradient(135deg, #f87171, #ef4444, #dc2626)',
+                      'from-orange-400 via-orange-500 to-orange-600': 'linear-gradient(135deg, #fb923c, #f97316, #ea580c)',
+                      'from-yellow-300 via-yellow-400 to-yellow-500': 'linear-gradient(135deg, #fde047, #facc15, #eab308)',
+                      'from-yellow-400 via-yellow-500 to-yellow-600': 'linear-gradient(135deg, #facc15, #eab308, #ca8a04)',
+                      'from-green-400 via-green-500 to-green-600': 'linear-gradient(135deg, #4ade80, #22c55e, #16a34a)',
+                      'from-blue-400 via-blue-500 to-blue-600': 'linear-gradient(135deg, #60a5fa, #3b82f6, #2563eb)',
+                      'from-teal-400 via-teal-500 to-teal-600': 'linear-gradient(135deg, #2dd4bf, #14b8a6, #0d9488)',
+                      'from-indigo-400 via-indigo-500 to-indigo-600': 'linear-gradient(135deg, #818cf8, #6366f1, #4f46e5)',
+                      'from-violet-400 via-violet-500 to-violet-600': 'linear-gradient(135deg, #a78bfa, #8b5cf6, #7c3aed)',
+                      'from-pink-400 via-pink-500 to-pink-600': 'linear-gradient(135deg, #f472b6, #ec4899, #db2777)',
+                      'from-gray-100 via-white to-gray-200': 'linear-gradient(135deg, #f3f4f6, #ffffff, #e5e7eb)',
+                      'from-gray-400 via-gray-500 to-gray-600': 'linear-gradient(135deg, #9ca3af, #6b7280, #4b5563)',
+                      'from-gray-300 via-gray-400 to-gray-500': 'linear-gradient(135deg, #d1d5db, #9ca3af, #6b7280)',
+                    };
+                    return gradientMap[gradientClass] || 'linear-gradient(135deg, #9ca3af, #6b7280)';
+                  };
                   return (
                     <motion.button
                       key={auraColor.name}
                       onClick={() => handleColorInfo(auraColor)}
-                      className={`bg-gradient-to-br ${auraColor.gradient} rounded-xl p-4 text-white shadow-lg hover:shadow-xl transition-all`}
+                      style={{
+                        background: getGradient(auraColor.gradient),
+                        borderRadius: '12px',
+                        padding: '16px',
+                        color: auraColor.name === 'White' ? '#1f2937' : 'white',
+                        border: 'none',
+                        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease-in-out',
+                      }}
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: 0.3 + idx * 0.05 }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.boxShadow = '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.boxShadow = '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)';
+                      }}
                     >
                       <ColorIcon className="w-8 h-8 mb-2 mx-auto" />
                       <p className="font-semibold">{auraColor.name}</p>
@@ -390,37 +515,124 @@ export function AuraVisualizationPage({ user, onNavigate, onLogout, onOpenNotifi
 
       {/* Aura Color Info Dialog */}
       <Dialog open={showInfo} onOpenChange={setShowInfo}>
-        <DialogContent className={selectedColor ? `bg-gradient-to-br ${selectedColor.gradient} text-white border-none` : ''}>
+        <DialogContent 
+          className="text-white border-none"
+          style={selectedColor ? {
+            background: (() => {
+              const gradientMap: Record<string, string> = {
+                'from-red-400 via-red-500 to-red-600': 'linear-gradient(135deg, #f87171, #ef4444, #dc2626)',
+                'from-orange-400 via-orange-500 to-orange-600': 'linear-gradient(135deg, #fb923c, #f97316, #ea580c)',
+                'from-yellow-300 via-yellow-400 to-yellow-500': 'linear-gradient(135deg, #fde047, #facc15, #eab308)',
+                'from-yellow-400 via-yellow-500 to-yellow-600': 'linear-gradient(135deg, #facc15, #eab308, #ca8a04)',
+                'from-green-400 via-green-500 to-green-600': 'linear-gradient(135deg, #4ade80, #22c55e, #16a34a)',
+                'from-blue-400 via-blue-500 to-blue-600': 'linear-gradient(135deg, #60a5fa, #3b82f6, #2563eb)',
+                'from-teal-400 via-teal-500 to-teal-600': 'linear-gradient(135deg, #2dd4bf, #14b8a6, #0d9488)',
+                'from-indigo-400 via-indigo-500 to-indigo-600': 'linear-gradient(135deg, #818cf8, #6366f1, #4f46e5)',
+                'from-violet-400 via-violet-500 to-violet-600': 'linear-gradient(135deg, #a78bfa, #8b5cf6, #7c3aed)',
+                'from-pink-400 via-pink-500 to-pink-600': 'linear-gradient(135deg, #f472b6, #ec4899, #db2777)',
+                'from-gray-100 via-white to-gray-200': 'linear-gradient(135deg, #f3f4f6, #ffffff, #e5e7eb)',
+                'from-gray-400 via-gray-500 to-gray-600': 'linear-gradient(135deg, #9ca3af, #6b7280, #4b5563)',
+                'from-gray-300 via-gray-400 to-gray-500': 'linear-gradient(135deg, #d1d5db, #9ca3af, #6b7280)',
+              };
+              return gradientMap[selectedColor.gradient] || 'linear-gradient(135deg, #9ca3af, #6b7280)';
+            })(),
+            color: selectedColor.name === 'White' ? '#1f2937' : 'white',
+          } : {}}
+        >
           {selectedColor && (
             <>
               <DialogHeader>
-                <DialogTitle className="text-3xl text-white flex items-center gap-2">
+                <DialogTitle 
+                  className="text-3xl flex items-center gap-2"
+                  style={{ color: selectedColor.name === 'White' ? '#1f2937' : 'white' }}
+                >
                   <selectedColor.icon className="w-8 h-8" />
                   {selectedColor.name} Aura
                 </DialogTitle>
-                <DialogDescription className="text-white/90 text-lg">
+                <DialogDescription 
+                  className="text-lg"
+                  style={{ 
+                    color: selectedColor.name === 'White' ? '#374151' : 'white',
+                    opacity: 0.9 
+                  }}
+                >
                   {selectedColor.meaning}
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 mt-4">
                 <div>
-                  <h4 className="font-semibold mb-2">Characteristics</h4>
+                  <h4 
+                    className="font-semibold mb-2"
+                    style={{ color: selectedColor.name === 'White' ? '#1f2937' : 'white' }}
+                  >
+                    Characteristics
+                  </h4>
                   <div className="flex flex-wrap gap-2">
                     {selectedColor.traits.map((trait, idx) => (
-                      <Badge key={idx} variant="secondary" className="bg-white/30 text-white border-white/50">
+                      <span
+                        key={idx}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          padding: '4px 8px',
+                          fontSize: '12px',
+                          fontWeight: '500',
+                          borderRadius: '6px',
+                          backgroundColor: selectedColor.name === 'White' ? 'rgba(31, 41, 55, 0.2)' : 'rgba(255, 255, 255, 0.3)',
+                          color: selectedColor.name === 'White' ? '#1f2937' : 'white',
+                          border: selectedColor.name === 'White' ? '1px solid rgba(31, 41, 55, 0.3)' : '1px solid rgba(255, 255, 255, 0.5)',
+                        }}
+                      >
                         {trait}
-                      </Badge>
+                      </span>
                     ))}
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-white/20 backdrop-blur-sm rounded-lg p-3">
-                    <p className="text-sm opacity-80">Associated Chakra</p>
-                    <p className="font-semibold">{selectedColor.chakra}</p>
+                  <div 
+                    className="backdrop-blur-sm rounded-lg p-3"
+                    style={{
+                      backgroundColor: selectedColor.name === 'White' ? 'rgba(31, 41, 55, 0.1)' : 'rgba(255, 255, 255, 0.2)',
+                    }}
+                  >
+                    <p 
+                      className="text-sm mb-1"
+                      style={{ 
+                        color: selectedColor.name === 'White' ? '#6b7280' : 'white',
+                        opacity: 0.8 
+                      }}
+                    >
+                      Associated Chakra
+                    </p>
+                    <p 
+                      className="font-semibold"
+                      style={{ color: selectedColor.name === 'White' ? '#1f2937' : 'white' }}
+                    >
+                      {selectedColor.chakra}
+                    </p>
                   </div>
-                  <div className="bg-white/20 backdrop-blur-sm rounded-lg p-3">
-                    <p className="text-sm opacity-80">Element</p>
-                    <p className="font-semibold">{selectedColor.element}</p>
+                  <div 
+                    className="backdrop-blur-sm rounded-lg p-3"
+                    style={{
+                      backgroundColor: selectedColor.name === 'White' ? 'rgba(31, 41, 55, 0.1)' : 'rgba(255, 255, 255, 0.2)',
+                    }}
+                  >
+                    <p 
+                      className="text-sm mb-1"
+                      style={{ 
+                        color: selectedColor.name === 'White' ? '#6b7280' : 'white',
+                        opacity: 0.8 
+                      }}
+                    >
+                      Element
+                    </p>
+                    <p 
+                      className="font-semibold"
+                      style={{ color: selectedColor.name === 'White' ? '#1f2937' : 'white' }}
+                    >
+                      {selectedColor.element}
+                    </p>
                   </div>
                 </div>
               </div>

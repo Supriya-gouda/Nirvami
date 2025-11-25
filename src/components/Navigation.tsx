@@ -1,6 +1,6 @@
 import { motion } from 'motion/react';
 import { useState, useEffect } from 'react';
-import { Home, MessageCircle, FileText, Activity, UtensilsCrossed, TrendingUp, LogOut, Sparkles, Watch, Bell, User as UserIconLucide, Settings } from 'lucide-react';
+import { Home, MessageCircle, FileText, Activity, UtensilsCrossed, TrendingUp, LogOut, Sparkles, Watch, Bell, User as UserIconLucide, Settings, CalendarCheck } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import type { PageType, User } from '../App';
@@ -41,6 +41,7 @@ export function Navigation({ currentPage, onNavigate, onLogout, user, onOpenNoti
     { id: 'manual' as PageType, icon: FileText, label: 'Log' },
     { id: 'aura' as PageType, icon: Sparkles, label: 'Aura' },
     { id: 'yoga' as PageType, icon: Activity, label: 'Yoga' },
+    { id: 'routines' as PageType, icon: CalendarCheck, label: 'Routines' },
     { id: 'diet' as PageType, icon: UtensilsCrossed, label: 'Diet' },
     { id: 'device' as PageType, icon: Watch, label: 'Device' },
     { id: 'progress' as PageType, icon: TrendingUp, label: 'Progress' },
@@ -111,11 +112,11 @@ export function Navigation({ currentPage, onNavigate, onLogout, user, onOpenNoti
                   )}
                 </motion.button>
 
-                {/* Profile Button */}
+                {/* Settings Button */}
                 <motion.button
-                  onClick={() => onNavigate('profile')}
+                  onClick={() => onNavigate('settings')}
                   className={`p-2 rounded-lg transition-colors ${
-                    currentPage === 'profile'
+                    currentPage === 'settings'
                       ? 'bg-purple-100 text-purple-700'
                       : 'text-gray-600 hover:bg-purple-50 hover:text-purple-700'
                   }`}
