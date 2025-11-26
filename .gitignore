@@ -21,12 +21,22 @@ coverage
 
 # Dependency directories
 node_modules/
+frontend/node_modules/
+backend/venv/
+backend/__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
 
 # Build output
 dist/
+build/
 .next/
 .nuxt/
 out/
+frontend/dist/
+frontend/build/
 
 # Vite cache
 .vite/
@@ -43,8 +53,17 @@ out/
 # Env files
 .env
 .env.*
+!.env.example
+frontend/.env.local
+backend/.env
 
 # OS files
 .DS_Store
 Thumbs.db
+
+# ML Models cache
+backend/models_cache/
+
+# Redis
+dump.rdb
 

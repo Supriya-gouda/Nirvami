@@ -473,6 +473,134 @@ CREATE POLICY "Admins can view audit logs" ON audit_logs
     );
 
 -- ============================================
+-- 12. YOGA POSES & SOUND THERAPY
+-- ============================================
+
+-- Yoga poses library
+CREATE TABLE IF NOT EXISTS yoga_poses (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    name TEXT NOT NULL,
+    sanskrit_name TEXT,
+    duration_min INTEGER NOT NULL,  -- Duration in seconds
+    duration_max INTEGER NOT NULL,
+    difficulty TEXT CHECK (difficulty IN ('beginner', 'intermediate', 'advanced')),
+    dosha_tags TEXT[] NOT NULL,  -- ['vata', 'pitta', 'kapha']
+    emotion_tags TEXT[] NOT NULL,  -- ['anxious', 'calm', 'energized', etc.]
+    benefits TEXT[] NOT NULL,
+    instructions TEXT,
+    icon TEXT,
+    category TEXT,  -- 'standing', 'balancing', 'restorative', etc.
+    video_url TEXT,
+    thumbnail_url TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_yoga_poses_dosha ON yoga_poses USING GIN (dosha_tags);
+CREATE INDEX idx_yoga_poses_emotion ON yoga_poses USING GIN (emotion_tags);
+CREATE INDEX idx_yoga_poses_difficulty ON yoga_poses (difficulty);
+
+-- Sound therapy tracks
+CREATE TABLE IF NOT EXISTS sound_tracks (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    title TEXT NOT NULL,
+    duration_minutes INTEGER NOT NULL,
+    dosha_tags TEXT[] NOT NULL,  -- ['vata', 'pitta', 'kapha']
+    emotion_tags TEXT[] NOT NULL,  -- ['anxious', 'calm', 'energized', etc.]
+    frequency_hz INTEGER,  -- Healing frequency (e.g., 432, 528)
+    description TEXT,
+    mood_category TEXT,  -- 'calming', 'energizing', 'meditative', etc.
+    icon TEXT,
+    audio_url TEXT,
+    thumbnail_gradient TEXT,  -- Tailwind gradient classes
+    play_count INTEGER DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_sound_tracks_dosha ON sound_tracks USING GIN (dosha_tags);
+CREATE INDEX idx_sound_tracks_emotion ON sound_tracks USING GIN (emotion_tags);
+CREATE INDEX idx_sound_tracks_mood ON sound_tracks (mood_category);
+
+-- User yoga practice logs
+CREATE TABLE IF NOT EXISTS yoga_practice_logs (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+    pose_id UUID REFERENCES yoga_poses(id) ON DELETE SET NULL,
+    duration_seconds INTEGER,
+    feedback_quality INTEGER CHECK (feedback_quality BETWEEN 1 AND 5),
+    notes TEXT,
+    practiced_at TIMESTAMPTZ DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_yoga_logs_user ON yoga_practice_logs (user_id);
+CREATE INDEX idx_yoga_logs_date ON yoga_practice_logs (practiced_at);
+
+-- User sound therapy logs
+CREATE TABLE IF NOT EXISTS sound_therapy_logs (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+    track_id UUID REFERENCES sound_tracks(id) ON DELETE SET NULL,
+    duration_listened INTEGER,  -- seconds
+    completed BOOLEAN DEFAULT false,
+    mood_before TEXT,
+    mood_after TEXT,
+    listened_at TIMESTAMPTZ DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_sound_logs_user ON sound_therapy_logs (user_id);
+CREATE INDEX idx_sound_logs_date ON sound_therapy_logs (listened_at);
+
+-- Enable RLS on yoga and sound therapy tables
+ALTER TABLE yoga_poses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sound_tracks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE yoga_practice_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sound_therapy_logs ENABLE ROW LEVEL SECURITY;
+
+-- Yoga poses and sound tracks are public
+CREATE POLICY "Anyone can view yoga poses" ON yoga_poses
+    FOR SELECT USING (true);
+
+CREATE POLICY "Anyone can view sound tracks" ON sound_tracks
+    FOR SELECT USING (true);
+
+-- Practice logs are private
+CREATE POLICY "Users can view own practice logs" ON yoga_practice_logs
+    FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own practice logs" ON yoga_practice_logs
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can view own sound logs" ON sound_therapy_logs
+    FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own sound logs" ON sound_therapy_logs
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+-- ============================================
+-- 13. USER ENGAGEMENT & STREAKS
+-- ============================================
+
+-- Track daily login streaks
+CREATE TABLE IF NOT EXISTS user_streaks (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    user_id UUID REFERENCES profiles(id) ON DELETE CASCADE UNIQUE,
+    current_streak INTEGER DEFAULT 0,
+    longest_streak INTEGER DEFAULT 0,
+    last_visit_date DATE,
+    total_visits INTEGER DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE user_streaks ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view own streaks" ON user_streaks
+    FOR ALL USING (auth.uid() = user_id);
+
+-- ============================================
 -- FUNCTIONS & TRIGGERS
 -- ============================================
 
@@ -494,6 +622,15 @@ CREATE TRIGGER update_user_preferences_updated_at BEFORE UPDATE ON user_preferen
 CREATE TRIGGER update_ayurveda_resources_updated_at BEFORE UPDATE ON ayurveda_resources
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+CREATE TRIGGER update_yoga_poses_updated_at BEFORE UPDATE ON yoga_poses
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_sound_tracks_updated_at BEFORE UPDATE ON sound_tracks
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_user_streaks_updated_at BEFORE UPDATE ON user_streaks
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
 -- Create default preferences on profile creation
 CREATE OR REPLACE FUNCTION create_default_preferences()
 RETURNS TRIGGER AS $$
@@ -509,3 +646,19 @@ CREATE TRIGGER create_user_preferences_on_signup
     AFTER INSERT ON profiles
     FOR EACH ROW
     EXECUTE FUNCTION create_default_preferences();
+
+-- ============================================
+-- COMMENTS
+-- ============================================
+
+COMMENT ON TABLE profiles IS 'User profiles with Ayurvedic dosha types and preferences';
+COMMENT ON TABLE emotion_logs IS 'AI-detected emotions from conversations and manual logs';
+COMMENT ON TABLE aura_entries IS 'Daily aura visualizations computed from emotion patterns';
+COMMENT ON TABLE wellness_scores IS 'Comprehensive wellness scoring based on multiple factors';
+COMMENT ON TABLE dosha_assessments IS 'Ayurvedic constitution assessments (Vata, Pitta, Kapha)';
+COMMENT ON TABLE wearable_snapshots IS 'Health metrics from wearable devices or manual entry';
+COMMENT ON TABLE daily_routines IS 'Ayurvedic daily routine (dinacharya) tracking';
+COMMENT ON TABLE yoga_poses IS 'Ayurvedic yoga poses personalized by dosha and emotion';
+COMMENT ON TABLE sound_tracks IS 'Sound therapy tracks with healing frequencies';
+COMMENT ON TABLE meals IS 'Meal tracking with Ayurvedic dosha impact analysis';
+COMMENT ON TABLE user_streaks IS 'Daily login streak tracking for user engagement';

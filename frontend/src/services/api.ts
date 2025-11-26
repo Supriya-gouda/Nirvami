@@ -421,6 +421,21 @@ class ApiService {
 
   // ==================== Aura Methods ====================
 
+  async getAuraFromLatestEmotion(): Promise<{
+    auraName: string;
+    emotionLabel: string;
+    colorCode: string;
+    gradient: string[];
+    traits: string[];
+    description: string;
+    chakra: string;
+    element: string;
+    intensity: number;
+  }> {
+    const response = await this.api.get('/aura/from-latest-emotion');
+    return response.data;
+  }
+
   async getTodayAura(): Promise<AuraEntry> {
     try {
       // Use Supabase directly for faster loading

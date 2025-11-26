@@ -54,6 +54,9 @@ export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications, onR
   const [loading, setLoading] = useState(true);
   const [mentalState, setMentalState] = useState<string>('balanced');
   const [generatingAura, setGeneratingAura] = useState(false);
+  
+  // Dynamic aura from latest emotion
+  const [dynamicAura, setDynamicAura] = useState<any>(null);
 
   // Local State
   const [streak, setStreak] = useState<number>(0);
@@ -70,8 +73,8 @@ export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications, onR
       try {
         setLoading(true);
 
-        // Fetch all data in parallel including streak
-        const [wellness, aura, dosha, emotions, streakData, wearable] = await Promise.all([
+        // Fetch all data in parallel including dynamic aura from latest emotion
+        const [wellness, aura, dosha, emotions, streakData, wearable, latestAura] = await Promise.all([
           api.getTodayWellness().catch(() => null),
           api.getTodayAura().catch(() => null),
           api.getLatestDosha().catch(() => null),
@@ -84,6 +87,7 @@ export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications, onR
             console.error('Error fetching wearable data:', err);
             return { hasData: false, steps: 0, sleepHours: 0, heartRate: 0, stressLevel: 0 };
           }),
+          api.getAuraFromLatestEmotion().catch(() => null), // Get latest emotion and map to aura therapy color
         ]);
 
         setWellnessData(wellness);
@@ -93,6 +97,7 @@ export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications, onR
         setWearableSummary(wearable || { hasData: false, steps: 0, sleepHours: 0, heartRate: 0, stressLevel: 0 });
         setStreak(streakData?.current_streak || 0);
         setLongestStreak(streakData?.longest_streak || 0);
+        setDynamicAura(latestAura); // Apply dynamic aura gradient and text based on backend response
       } catch (error) {
         console.error('Failed to fetch dashboard data:', error);
       } finally {
@@ -236,15 +241,44 @@ export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications, onR
 
   // Get current aura visualization
   const getAuraGradient = () => {
+    // Use dynamic aura from latest emotion if available
+    if (dynamicAura) {
+      const gradientCss = `linear-gradient(135deg, ${dynamicAura.gradient.join(', ')})`;
+      const mainColor = dynamicAura.gradient[1] || dynamicAura.gradient[0];
+      
+      return {
+        gradient: `from-${dynamicAura.colorCode}-300 via-${dynamicAura.colorCode}-400 to-${dynamicAura.colorCode}-500`,
+        gradientCss,
+        innerGlow: `${mainColor}66`,
+        outerGlow: `${mainColor}33`,
+        bgGradient: `from-${dynamicAura.colorCode}-50/50 to-${dynamicAura.colorCode}-100/50`,
+        name: dynamicAura.auraName,
+        description: dynamicAura.description,
+        remedy: `Based on ${dynamicAura.emotionLabel}`,
+        traits: dynamicAura.traits,
+        chakra: dynamicAura.chakra,
+        element: dynamicAura.element,
+        intensity: dynamicAura.intensity,
+        emotionLabel: dynamicAura.emotionLabel
+      };
+    }
+    
+    // Reset to neutral grey if no recent emotion
     if (!auraData) {
       return {
         gradient: 'from-gray-300 via-gray-400 to-gray-500',
+        gradientCss: 'linear-gradient(135deg, #9ca3af, #6b7280, #4b5563)',
         innerGlow: 'rgba(156, 163, 175, 0.4)',
         outerGlow: 'rgba(156, 163, 175, 0.2)',
         bgGradient: 'from-gray-50/50 to-gray-50/50',
-        name: 'Neutral State',
-        description: 'Building your energy profile',
-        remedy: 'Continue logging your emotions and activities'
+        name: 'Neutral Grey Aura',
+        description: 'Neutral & Balanced',
+        remedy: 'Log your mood to see your aura',
+        traits: ['Neutral', 'Balanced', 'Calm', 'Stillness'],
+        chakra: 'All Chakras',
+        element: 'Earth',
+        intensity: 50,
+        emotionLabel: 'No recent mood'
       };
     }
 
@@ -630,9 +664,13 @@ export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications, onR
                       ease: 'easeInOut',
                     }}
                   >
-                    {/* Base gradient */}
+                    {/* Base gradient - dynamic from latest emotion */}
                     <div
-                      className={`absolute inset-0 rounded-full bg-gradient-to-br ${currentAura.gradient}`}
+                      className="absolute inset-0 rounded-full"
+                      /* eslint-disable-next-line react/forbid-dom-props */
+                      style={{
+                        background: currentAura.gradientCss || `linear-gradient(135deg, #9ca3af, #6b7280, #4b5563)`
+                      }}
                     />
 
                     {/* Bottom shadow for depth */}
@@ -734,11 +772,27 @@ export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications, onR
                     {currentAura.name}
                   </Badge>
                   <h3 className="text-lg text-gray-800 mb-2">
-                    {auraData?.color_code ? `${auraData.color_code.charAt(0).toUpperCase()}${auraData.color_code.slice(1)}` : 'Purple'} Aura
-                  </h3>
-                  <p className="text-sm text-gray-600 mb-4">
                     {currentAura.description}
-                  </p>
+                  </h3>
+                  {currentAura.emotionLabel && currentAura.emotionLabel !== 'No recent mood' && (
+                    <p className="text-xs text-gray-500 mb-3">
+                      Based on: {currentAura.emotionLabel}
+                    </p>
+                  )}
+                  <div className="flex flex-wrap gap-1 mb-3">
+                    {currentAura.traits?.map((trait: string, idx: number) => (
+                      <span
+                        key={idx}
+                        className="text-xs px-2 py-1 bg-gray-100 text-gray-700 rounded"
+                      >
+                        {trait}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="text-xs text-gray-600 space-y-1">
+                    <p>⚡ {currentAura.chakra}</p>
+                    <p>🌿 {currentAura.element}</p>
+                  </div>
                 </div>
 
                 {/* Color Therapy Info */}
