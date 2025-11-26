@@ -730,7 +730,7 @@ class ApiService {
   }
 
   async uploadWatchXML(formData: FormData): Promise<any> {
-    const response = await this.api.post('/wearable/upload-xml', formData, {
+    const response = await this.api.post('/wearable-v2/upload-xml', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },

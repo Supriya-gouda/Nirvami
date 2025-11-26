@@ -724,19 +724,6 @@ export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications, onR
                     {/* Outer border highlight */}
                     <div className="absolute inset-0 rounded-full border-2 border-white/20" />
                   </motion.div>
-
-                  {/* Energy Intensity Display */}
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: 0.5 }}
-                    className="absolute bottom-0 left-1/2 -translate-x-1/2 text-center"
-                  >
-                    <p className="text-4xl font-bold text-gray-800">
-                      {auraData ? Math.round(auraData.intensity * 100) : 0}%
-                    </p>
-                    <p className="text-sm text-gray-600 mt-1">Energy Intensity</p>
-                  </motion.div>
                 </div>
               </div>
 
@@ -752,36 +739,6 @@ export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications, onR
                   <p className="text-sm text-gray-600 mb-4">
                     {currentAura.description}
                   </p>
-
-                  {/* Mental State Selector */}
-                  <div className="space-y-2">
-                    <p className="text-xs text-gray-500 mb-3">How are you feeling right now?</p>
-                    <Select value={mentalState} onValueChange={handleMentalStateChange} disabled={generatingAura}>
-                      <SelectTrigger className="w-full bg-white/80 border-white/50">
-                        <SelectValue placeholder="— None" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="balanced">🧘 Balanced & Calm</SelectItem>
-                        <SelectItem value="energized">⚡ Energized & Active</SelectItem>
-                        <SelectItem value="stressed">😰 Stressed & Anxious</SelectItem>
-                        <SelectItem value="focused">🎯 Focused & Sharp</SelectItem>
-                        <SelectItem value="tired">😴 Tired & Drained</SelectItem>
-                        <SelectItem value="joyful">😊 Joyful & Happy</SelectItem>
-                        <SelectItem value="sad">😢 Sad & Low</SelectItem>
-                        <SelectItem value="angry">😠 Angry & Frustrated</SelectItem>
-                        <SelectItem value="peaceful">🕊️ Peaceful & Content</SelectItem>
-                        <SelectItem value="confused">🤔 Confused & Uncertain</SelectItem>
-                        <SelectItem value="motivated">🔥 Motivated & Driven</SelectItem>
-                        <SelectItem value="overwhelmed">🌊 Overwhelmed</SelectItem>
-                        <SelectItem value="creative">🎨 Creative & Inspired</SelectItem>
-                        <SelectItem value="restless">😣 Restless & Agitated</SelectItem>
-                        <SelectItem value="grateful">🙏 Grateful & Thankful</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {generatingAura && (
-                      <p className="text-xs text-purple-600 animate-pulse">Generating new aura...</p>
-                    )}
-                  </div>
                 </div>
 
                 {/* Color Therapy Info */}
@@ -790,17 +747,6 @@ export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications, onR
                   <p className="text-xs text-gray-600 leading-relaxed">
                     The colors you see are scientifically chosen based on color psychology to help regulate your emotions. Calming blues soothe anxiety, warm tones uplift mood, and balanced greens promote harmony.
                   </p>
-                </div>
-
-                {/* Remedy Section */}
-                <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-5 border border-white/50">
-                  <div className="flex items-start gap-2">
-                    <Sparkles className="w-5 h-5 text-purple-600 mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="text-sm font-medium text-gray-800 mb-1">Recommended Practice</p>
-                      <p className="text-xs text-gray-700">{currentAura.remedy}</p>
-                    </div>
-                  </div>
                 </div>
 
                 {/* View Details Button */}

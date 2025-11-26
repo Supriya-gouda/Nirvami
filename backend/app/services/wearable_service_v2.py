@@ -11,9 +11,9 @@ class WearableService:
     """Service for managing wearable health data."""
     
     @staticmethod
-    def save_manual_entry(user_id: str, data: Dict[str, Any]) -> Dict:
+    def save_manual_entry(user_id: str, data: Dict[str, Any], source: str = "manual") -> Dict:
         """
-        Save manually entered health data.
+        Save health data entry (manual or from device).
         
         Args:
             user_id: User ID
@@ -23,8 +23,10 @@ class WearableService:
                 "avg_heart_rate": 72,
                 "steps": 8000,
                 "stress_level": 5,
-                "calories_burned": 350
+                "calories_burned": 350,
+                "source": "manual" or "watch" (optional, overridden by source param)
             }
+            source: Data source - "manual" for manual entry, "watch" for Apple Health XML
         
         Returns:
             Saved snapshot record
@@ -34,10 +36,13 @@ class WearableService:
             supabase = get_supabase(use_service_role=True)
             
             # Prepare snapshot data
+            # Use source from data if provided, otherwise use parameter (default: "manual")
+            data_source = data.get("source", source)
+            
             snapshot = {
                 "user_id": user_id,
                 "date": data.get("date"),
-                "source": "manual",
+                "source": data_source,
                 "sleep_hours": data.get("sleep_hours"),
                 "avg_heart_rate": data.get("avg_heart_rate"),
                 "steps": data.get("steps"),

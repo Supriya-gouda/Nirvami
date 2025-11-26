@@ -1,5 +1,5 @@
 """Clean Wearable API Routes - Simplified version."""
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from app.utils.auth import get_current_user_id
 from app.services.wearable_service_v2 import WearableService
 from app.services.alert_service import AlertService
@@ -8,6 +8,8 @@ from pydantic import BaseModel
 from typing import Optional
 import logging
 import asyncio
+import xml.etree.ElementTree as ET
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -177,3 +179,146 @@ async def analyze_health(
     except Exception as e:
         logger.error(f"❌ Error analyzing health: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/upload-xml")
+async def upload_xml_and_analyze(
+    file: UploadFile = File(...),
+    current_user_id: str = Depends(get_current_user_id)
+):
+    """
+    Upload Apple Watch XML export and analyze health data.
+    
+    Complete pipeline:
+    1. Parse XML to extract ALL metrics (HR, steps, sleep, calories, HRV)
+    2. Aggregate raw records into daily snapshots
+    3. Store in wearable_snapshots table (same as manual entry)
+    4. Run the SAME analysis logic as manual "Analyze" button
+    5. Return analysis results + recommendations
+    """
+    from app.services.apple_health_xml_parser import AppleHealthXMLParser
+    
+    try:
+        logger.info(f"📤 XML upload from user {current_user_id}: {file.filename}")
+        
+        # Validate file
+        if not file.filename or not file.filename.endswith('.xml'):
+            raise HTTPException(status_code=400, detail="File must be an XML file")
+        
+        # Read XML content
+        content = await file.read()
+        
+        if not content:
+            raise HTTPException(status_code=400, detail="File is empty")
+        
+        xml_str = content.decode('utf-8') if isinstance(content, bytes) else content
+        
+        # Parse XML using comprehensive parser
+        logger.info("🔍 Parsing Apple Health XML...")
+        parse_result = AppleHealthXMLParser.parse_xml(xml_str)
+        
+        if not parse_result["success"]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Failed to parse XML: {parse_result.get('error', 'Unknown error')}"
+            )
+        
+        daily_snapshots = parse_result["daily_snapshots"]
+        stats = parse_result["stats"]
+        
+        if not daily_snapshots:
+            return {
+                "success": False,
+                "message": "No health data found in XML file. The file may not contain heart rate, steps, or sleep data.",
+                "records_parsed": stats["total_records"],
+                "stats": stats
+            }
+        
+        logger.info(f"✅ Extracted {len(daily_snapshots)} daily snapshots from {stats['total_records']} raw records")
+        
+        # Save ALL daily snapshots to database (same as manual entry)
+        saved_count = 0
+        failed_count = 0
+        
+        for snapshot in daily_snapshots:
+            try:
+                # Add user_id
+                snapshot["user_id"] = current_user_id
+                
+                # Save using the SAME method as manual entry, but with 'watch' source
+                WearableService.save_manual_entry(
+                    user_id=current_user_id,
+                    data=snapshot,
+                    source="watch"  # Override source to 'watch' for XML uploads
+                )
+                saved_count += 1
+                
+            except Exception as save_error:
+                logger.error(f"Failed to save snapshot for {snapshot['date']}: {save_error}")
+                failed_count += 1
+        
+        logger.info(f"💾 Saved {saved_count}/{len(daily_snapshots)} snapshots to database")
+        
+        # Run the SAME analysis as the manual "Analyze" button
+        logger.info("🔍 Running health analysis on latest data...")
+        analysis = WearableService.analyze_health_risks(current_user_id)
+        
+        # Create notification if risks found (same as analyze endpoint)
+        if analysis["has_risks"]:
+            supabase = get_supabase(use_service_role=True)
+            
+            risk_emoji = {
+                "low": "ℹ️",
+                "medium": "⚠️",
+                "high": "🚨",
+                "critical": "🆘"
+            }
+            
+            notification_title = f"{risk_emoji.get(analysis['risk_level'], '📊')} Health Analysis Alert"
+            notification_body = f"{len(analysis['risks'])} health concern(s) detected from Apple Watch data:\n\n" + "\n".join(analysis['risks'][:3])
+            
+            try:
+                notification_type = "warning" if analysis['risk_level'] in ["high", "critical"] else "info"
+                await AlertService.create_in_app_notification(
+                    supabase=supabase,
+                    user_id=current_user_id,
+                    title=notification_title,
+                    body=notification_body,
+                    notification_type=notification_type,
+                    action_url="/device"
+                )
+                logger.info(f"✅ Created in-app notification")
+            except Exception as notif_error:
+                logger.error(f"Failed to create notification: {notif_error}")
+        
+        # Get latest snapshot for display
+        latest_snapshot = daily_snapshots[-1] if daily_snapshots else {}
+        
+        return {
+            "success": True,
+            "message": f"✅ Successfully uploaded and analyzed Apple Watch data! Processed {saved_count} days of health data.",
+            "records_parsed": stats["total_records"],
+            "days_processed": saved_count,
+            "snapshots_created": saved_count,
+            "snapshots_failed": failed_count,
+            "latest_metrics": {
+                "avg_heart_rate": latest_snapshot.get("avg_heart_rate"),
+                "steps": latest_snapshot.get("steps"),
+                "sleep_hours": latest_snapshot.get("sleep_hours"),
+                "calories_burned": latest_snapshot.get("calories_burned"),
+                "hrv_ms": latest_snapshot.get("hrv_ms"),
+                "stress_level": latest_snapshot.get("stress_level")
+            },
+            "stats": stats,
+            "analysis": analysis,
+            "date_range": {
+                "start": daily_snapshots[0]["date"] if daily_snapshots else None,
+                "end": daily_snapshots[-1]["date"] if daily_snapshots else None
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error processing XML: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to process XML: {str(e)}")

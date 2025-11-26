@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'motion/react';
-import { Upload, File, Check, AlertCircle, Loader2, Watch } from 'lucide-react';
+import { Upload, File, Check, AlertCircle, Loader2, Watch, Activity, Heart } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { Button } from './ui/button';
 import { Alert, AlertDescription } from './ui/alert';
@@ -17,6 +17,7 @@ export function WatchDataUpload({ onSuccess }: WatchDataUploadProps) {
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState('');
   const [stats, setStats] = useState<any>(null);
+  const [uploadTimestamp, setUploadTimestamp] = useState<string | null>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -42,7 +43,10 @@ export function WatchDataUpload({ onSuccess }: WatchDataUploadProps) {
     try {
       setUploading(true);
       setStatus('idle');
-      setMessage('Uploading and processing your health data...');
+      setMessage('Uploading and processing your Apple Watch data...');
+      // Clear previous results when starting new upload
+      setStats(null);
+      setUploadTimestamp(null);
 
       const formData = new FormData();
       formData.append('file', file);
@@ -50,11 +54,22 @@ export function WatchDataUpload({ onSuccess }: WatchDataUploadProps) {
       const response = await api.uploadWatchXML(formData);
 
       setStatus('success');
-      setMessage(response.message || 'Health data processed successfully!');
       setStats(response);
+      setUploadTimestamp(new Date().toLocaleString());
       
-      if (response.snapshots_created > 0) {
-        toast.success(`Success! Created ${response.snapshots_created} snapshots from ${response.records_count} records`);
+      if (response.success) {
+        const metrics = response.latest_metrics || {};
+        const metricsMsg = [
+          metrics.avg_heart_rate ? `HR: ${metrics.avg_heart_rate} bpm` : null,
+          metrics.steps ? `Steps: ${metrics.steps.toLocaleString()}` : null,
+          metrics.sleep_hours ? `Sleep: ${metrics.sleep_hours}h` : null,
+        ].filter(Boolean).join(' | ');
+        
+        setMessage(response.message || 'Apple Watch data processed successfully!');
+        
+        toast.success(`✅ Success! Processed ${response.days_processed} days of data`, {
+          description: metricsMsg || 'Data synced successfully'
+        });
       } else {
         toast.warning(response.message || 'No usable health data found in the file');
       }
@@ -63,13 +78,8 @@ export function WatchDataUpload({ onSuccess }: WatchDataUploadProps) {
         setTimeout(onSuccess, 2000);
       }
 
-      // Reset after success
-      setTimeout(() => {
-        setFile(null);
-        setStatus('idle');
-        setMessage('');
-        setStats(null);
-      }, 5000);
+      // Keep analysis visible - don't auto-clear
+      // User can manually clear by uploading a new file
 
     } catch (error: any) {
       console.error('Upload error:', error);
@@ -146,12 +156,12 @@ export function WatchDataUpload({ onSuccess }: WatchDataUploadProps) {
               {uploading ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Processing...
+                  Analyzing...
                 </>
               ) : (
                 <>
                   <Upload className="w-4 h-4 mr-2" />
-                  Upload & Process Data
+                  Upload & Analyze Data
                 </>
               )}
             </Button>
@@ -165,11 +175,54 @@ export function WatchDataUpload({ onSuccess }: WatchDataUploadProps) {
             <AlertDescription className="text-green-700">
               {message}
               {stats && (
-                <div className="mt-2 text-xs space-y-1">
-                  <p>• {stats.snapshots_created} snapshots created</p>
-                  <p>• {stats.days_processed} days processed</p>
-                  {stats.anomalies_detected > 0 && (
-                    <p className="text-orange-600">• {stats.anomalies_detected} health alerts created</p>
+                <div className="mt-3 space-y-2">
+                  {/* Extraction Stats */}
+                  <div className="text-xs space-y-1 pb-2 border-b border-green-200">
+                    <p className="font-semibold">Data Extracted:</p>
+                    <p>• {stats.records_parsed?.toLocaleString() || 0} total records parsed</p>
+                    <p>• {stats.days_processed || 0} days of health data saved</p>
+                    {stats.date_range && (
+                      <p className="text-green-600">
+                        📅 {stats.date_range.start} to {stats.date_range.end}
+                      </p>
+                    )}
+                  </div>
+                  
+                  {/* Latest Metrics */}
+                  {stats.latest_metrics && Object.keys(stats.latest_metrics).some(k => stats.latest_metrics[k]) && (
+                    <div className="text-xs space-y-1 pb-2 border-b border-green-200">
+                      <p className="font-semibold">Latest Synced Metrics:</p>
+                      {stats.latest_metrics.avg_heart_rate && (
+                        <p className="flex items-center gap-1">
+                          <Heart className="w-3 h-3" /> Heart Rate: {stats.latest_metrics.avg_heart_rate} bpm
+                        </p>
+                      )}
+                      {stats.latest_metrics.steps && (
+                        <p className="flex items-center gap-1">
+                          <Activity className="w-3 h-3" /> Steps: {stats.latest_metrics.steps.toLocaleString()}
+                        </p>
+                      )}
+                      {stats.latest_metrics.sleep_hours && (
+                        <p>😴 Sleep: {stats.latest_metrics.sleep_hours} hours</p>
+                      )}
+                      {stats.latest_metrics.calories_burned && (
+                        <p>🔥 Calories: {stats.latest_metrics.calories_burned} kcal</p>
+                      )}
+                      {stats.latest_metrics.hrv_ms && (
+                        <p>💓 HRV: {stats.latest_metrics.hrv_ms} ms</p>
+                      )}
+                      {stats.latest_metrics.stress_level && (
+                        <p>😌 Stress Level: {stats.latest_metrics.stress_level}/10</p>
+                      )}
+                    </div>
+                  )}
+                  
+                  {/* Sync Timestamp */}
+                  {uploadTimestamp && (
+                    <div className="text-xs text-green-700 pt-2">
+                      <p>🕒 Last synced: {uploadTimestamp}</p>
+                      <p className="text-green-600 mt-1 font-medium">✨ Check "Your Health Analysis" section below for detailed insights</p>
+                    </div>
                   )}
                 </div>
               )}

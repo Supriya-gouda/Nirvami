@@ -66,14 +66,33 @@ export function DevicePage({ user, onNavigate, onLogout, onOpenNotifications }: 
       if (latest && latest.hasData) {
         setWearableSummary(latest);
         setLatestData(latest.data);
+        
+        // Auto-fetch analysis if data exists
+        await fetchLatestAnalysis();
       } else {
         setWearableSummary(null);
         setLatestData(null);
+        setAnalysisResult(null);
       }
     } catch (error) {
       console.error('Failed to fetch wearable data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchLatestAnalysis = async () => {
+    if (!api.isAuthenticated()) return;
+
+    try {
+      // Silently fetch latest analysis without showing loading state
+      const result = await api.analyzeWearableHealth();
+      if (result?.analysis) {
+        setAnalysisResult(result.analysis);
+      }
+    } catch (error) {
+      console.error('Failed to fetch analysis:', error);
+      // Don't show error to user - analysis is optional
     }
   };
 
@@ -257,80 +276,8 @@ export function DevicePage({ user, onNavigate, onLogout, onOpenNotifications }: 
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {wearableSummary?.hasData ? (
-                    <div className="space-y-4">
-                      <Alert className="bg-green-50 border-green-200">
-                        <Check className="h-4 w-4 text-green-600" />
-                        <AlertDescription className="text-green-700">
-                          Data synced from {wearableSummary.source === 'watch' ? 'Apple Health XML' : 'Manual Entry'}
-                        </AlertDescription>
-                      </Alert>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        {wearableSummary.heartRate && (
-                          <div className="p-3 bg-red-50 rounded-lg">
-                            <div className="flex items-center gap-2 mb-1">
-                              <Heart className="w-4 h-4 text-red-500" />
-                              <span className="text-xs font-medium text-gray-600">Heart Rate</span>
-                            </div>
-                            <p className="text-lg font-bold text-gray-800">{Math.round(wearableSummary.heartRate)} bpm</p>
-                          </div>
-                        )}
-                        {wearableSummary.hrv && (
-                          <div className="p-3 bg-purple-50 rounded-lg">
-                            <div className="flex items-center gap-2 mb-1">
-                              <Activity className="w-4 h-4 text-purple-500" />
-                              <span className="text-xs font-medium text-gray-600">HRV</span>
-                            </div>
-                            <p className="text-lg font-bold text-gray-800">{Math.round(wearableSummary.hrv)} ms</p>
-                          </div>
-                        )}
-                        {wearableSummary.sleepHours !== null && wearableSummary.sleepHours !== undefined && (
-                          <div className="p-3 bg-blue-50 rounded-lg">
-                            <div className="flex items-center gap-2 mb-1">
-                              <Bed className="w-4 h-4 text-blue-500" />
-                              <span className="text-xs font-medium text-gray-600">Sleep</span>
-                            </div>
-                            <p className="text-lg font-bold text-gray-800">{wearableSummary.sleepHours.toFixed(1)} hrs</p>
-                          </div>
-                        )}
-                        {wearableSummary.steps && (
-                          <div className="p-3 bg-orange-50 rounded-lg">
-                            <div className="flex items-center gap-2 mb-1">
-                              <Footprints className="w-4 h-4 text-orange-500" />
-                              <span className="text-xs font-medium text-gray-600">Steps</span>
-                            </div>
-                            <p className="text-lg font-bold text-gray-800">{wearableSummary.steps.toLocaleString()}</p>
-                          </div>
-                        )}
-                      </div>
-
-                      {wearableSummary.lastSynced && (
-                        <div className="text-xs text-gray-500 text-center">
-                          Last synced: {new Date(wearableSummary.lastSynced).toLocaleString()}
-                        </div>
-                      )}
-                      
-                      {/* Allow re-upload */}
-                      <div className="pt-4 border-t">
-                        <WatchDataUpload onSuccess={fetchLatestData} />
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      <Alert>
-                        <AlertCircle className="h-4 w-4" />
-                        <AlertDescription>
-                          No data synced yet. Upload Apple Health XML export or use manual entry.
-                        </AlertDescription>
-                      </Alert>
-                      
-                      {/* XML Upload Component */}
-                      <div className="mt-4">
-                        <WatchDataUpload onSuccess={fetchLatestData} />
-                      </div>
-                    </>
-                  )}
+                  {/* XML Upload Component */}
+                  <WatchDataUpload onSuccess={fetchLatestData} />
                 </div>
               </CardContent>
             </Card>
@@ -361,193 +308,218 @@ export function DevicePage({ user, onNavigate, onLogout, onOpenNotifications }: 
                     <p className="text-gray-600 mb-6">
                       Track your sleep, heart rate, and activity levels for better insights
                     </p>
-                    <button
-                      onClick={() => {
-                        console.log('Manual entry button clicked');
-                        setShowManualInput(true);
+                      <button
+                        onClick={() => {
+                          console.log('Manual entry button clicked');
+                          setShowManualInput(true);
+                        }}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          padding: '12px 24px',
+                          backgroundColor: '#9333ea',
+                          color: 'white',
+                          fontWeight: '500',
+                          fontSize: '16px',
+                          borderRadius: '8px',
+                          border: 'none',
+                          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease-in-out',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = '#7e22ce';
+                          e.currentTarget.style.boxShadow = '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = '#9333ea';
+                          e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
+                        }}
+                        onMouseDown={(e) => {
+                          e.currentTarget.style.transform = 'scale(0.95)';
+                        }}
+                        onMouseUp={(e) => {
+                          e.currentTarget.style.transform = 'scale(1)';
+                        }}
+                      >
+                        <Plus className="w-4 h-4" style={{ marginRight: '8px' }} />
+                        {wearableSummary?.hasData ? 'Log New Data' : 'Start Logging'}
+                      </button>
+                    </div>
+                  ) : (
+                    <ManualHealthEntry
+                      onSuccess={() => {
+                        console.log('Manual entry success callback');
+                        setShowManualInput(false);
+                        fetchLatestData();
+                        fetchHistory();
+                        toast.success('Health data saved successfully!');
                       }}
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        padding: '12px 24px',
-                        backgroundColor: '#9333ea',
-                        color: 'white',
-                        fontWeight: '500',
-                        fontSize: '16px',
-                        borderRadius: '8px',
-                        border: 'none',
-                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease-in-out',
+                      onCancel={() => {
+                        console.log('Manual entry cancelled');
+                        setShowManualInput(false);
                       }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = '#7e22ce';
-                        e.currentTarget.style.boxShadow = '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = '#9333ea';
-                        e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
-                      }}
-                      onMouseDown={(e) => {
-                        e.currentTarget.style.transform = 'scale(0.95)';
-                      }}
-                      onMouseUp={(e) => {
-                        e.currentTarget.style.transform = 'scale(1)';
-                      }}
-                    >
-                      <Plus className="w-4 h-4" style={{ marginRight: '8px' }} />
-                      {wearableSummary?.hasData ? 'Log New Data' : 'Start Logging'}
-                    </button>
-                  </div>
+                    />
+                  )}
+                </CardContent>
+              </Card>
+            </motion.div>
+          </div>
+
+          {/* Centered Analyze Button */}
+          {wearableSummary?.hasData && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mt-8 flex justify-center"
+            >
+              <button
+                onClick={handleAnalyze}
+                disabled={analyzing}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  padding: '14px 32px',
+                  background: 'linear-gradient(to right, #9333ea, #2563eb)',
+                  color: 'white',
+                  fontWeight: '600',
+                  fontSize: '16px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                  cursor: analyzing ? 'not-allowed' : 'pointer',
+                  opacity: analyzing ? 0.7 : 1,
+                  transition: 'all 0.2s ease-in-out',
+                }}
+                onMouseEnter={(e) => {
+                  if (!analyzing) {
+                    e.currentTarget.style.background = 'linear-gradient(to right, #7e22ce, #1d4ed8)';
+                    e.currentTarget.style.boxShadow = '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)';
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'linear-gradient(to right, #9333ea, #2563eb)';
+                  e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                }}
+              >
+                {analyzing ? (
+                  <>
+                    <RefreshCw className="w-5 h-5 mr-2 animate-spin" />
+                    Analyzing Your Health Data...
+                  </>
                 ) : (
-                  <ManualHealthEntry
-                    onSuccess={() => {
-                      console.log('Manual entry success callback');
-                      setShowManualInput(false);
-                      fetchLatestData();
-                      fetchHistory();
-                      toast.success('Health data saved successfully!');
-                    }}
-                    onCancel={() => {
-                      console.log('Manual entry cancelled');
-                      setShowManualInput(false);
-                    }}
-                  />
+                  <>
+                    <Sparkles className="w-5 h-5 mr-2" />
+                    Analyze Health Data
+                  </>
                 )}
-              </CardContent>
-            </Card>
-          </motion.div>
+              </button>
+            </motion.div>
+          )}
 
-          {/* Analyze Health Button */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Brain className="w-5 h-5 text-purple-600" />
-                  Health Analysis
-                </CardTitle>
-                <CardDescription>
-                  Analyze your health data for potential risks
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <button
-                    onClick={handleAnalyze}
-                    disabled={analyzing || !wearableSummary?.hasData}
-                    style={{
-                      width: '100%',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '8px',
-                      padding: '10px 16px',
-                      background: 'linear-gradient(to right, #9333ea, #2563eb)',
-                      color: 'white',
-                      fontWeight: '500',
-                      fontSize: '14px',
-                      borderRadius: '6px',
-                      border: 'none',
-                      cursor: analyzing || !wearableSummary?.hasData ? 'not-allowed' : 'pointer',
-                      opacity: analyzing || !wearableSummary?.hasData ? 0.5 : 1,
-                      transition: 'all 0.2s ease-in-out',
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!analyzing && wearableSummary?.hasData) {
-                        e.currentTarget.style.background = 'linear-gradient(to right, #7e22ce, #1d4ed8)';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'linear-gradient(to right, #9333ea, #2563eb)';
-                    }}
-                  >
-                    {analyzing ? (
-                      <>
-                        <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                        Analyzing...
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="w-4 h-4 mr-2" />
-                        Analyze Health Data
-                      </>
+          {/* Unified Health Analysis Results */}
+          {analysisResult && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mt-8"
+            >
+              <Card className="border-purple-100 shadow-lg">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Brain className="w-6 h-6 text-purple-600" />
+                      <CardTitle>Your Health Analysis</CardTitle>
+                    </div>
+                    {wearableSummary?.data && (
+                      <span className="text-xs px-3 py-1 bg-purple-50 text-purple-700 rounded-full">
+                        {wearableSummary.data.source === 'watch' ? '⌚ Apple Watch' : '✍️ Manual Entry'}
+                      </span>
                     )}
-                  </button>
+                  </div>
+                  <CardDescription>
+                    Based on your latest synced data
+                    {wearableSummary?.data?.date && ` • ${new Date(wearableSummary.data.date).toLocaleDateString()}`}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {/* Risk Level Badge */}
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-medium text-gray-700">Risk Level:</span>
+                      <span className={`px-4 py-2 rounded-full text-sm font-semibold ${
+                        analysisResult.risk_level === 'critical' ? 'bg-red-100 text-red-700 border border-red-300' :
+                        analysisResult.risk_level === 'high' ? 'bg-orange-100 text-orange-700 border border-orange-300' :
+                        analysisResult.risk_level === 'medium' ? 'bg-yellow-100 text-yellow-700 border border-yellow-300' :
+                        'bg-green-100 text-green-700 border border-green-300'
+                      }`}>
+                        {analysisResult.risk_level.toUpperCase()}
+                      </span>
+                    </div>
 
-                  {analysisResult && (
-                    <motion.div
-                      initial={{ opacity: 0, scale: 0.95 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      className="space-y-3"
-                    >
-                      {/* Risk Level Badge */}
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium">Risk Level:</span>
-                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                          analysisResult.risk_level === 'critical' ? 'bg-red-100 text-red-700' :
-                          analysisResult.risk_level === 'high' ? 'bg-orange-100 text-orange-700' :
-                          analysisResult.risk_level === 'medium' ? 'bg-yellow-100 text-yellow-700' :
-                          'bg-green-100 text-green-700'
-                        }`}>
-                          {analysisResult.risk_level.toUpperCase()}
-                        </span>
+                    {/* Risks or Success Message */}
+                    {analysisResult.risks && analysisResult.risks.length > 0 ? (
+                      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                        <h4 className="font-semibold text-base mb-3 text-red-900 flex items-center gap-2">
+                          <AlertCircle className="w-5 h-5" />
+                          Detected Concerns
+                        </h4>
+                        <ul className="space-y-2">
+                          {analysisResult.risks.map((risk: string, idx: number) => (
+                            <li key={idx} className="text-sm flex items-start gap-2 text-red-800">
+                              <span className="text-red-600 mt-0.5">•</span>
+                              <span>{risk}</span>
+                            </li>
+                          ))}
+                        </ul>
                       </div>
+                    ) : (
+                      <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                        <p className="text-base text-green-800 flex items-center gap-2">
+                          <Check className="w-5 h-5" />
+                          ✨ No health risks detected! Your metrics look good.
+                        </p>
+                      </div>
+                    )}
 
-                      {/* Risks */}
-                      {analysisResult.risks.length > 0 && (
-                        <div className="space-y-2">
-                          <h4 className="font-semibold text-sm">Detected Concerns:</h4>
-                          <ul className="space-y-1">
-                            {analysisResult.risks.slice(0, 5).map((risk: string, idx: number) => (
-                              <li key={idx} className="text-sm flex items-start gap-2">
-                                <AlertCircle className="w-4 h-4 mt-0.5 text-orange-500 flex-shrink-0" />
-                                <span>{risk}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
+                    {/* Recommendations */}
+                    {analysisResult.recommendations && analysisResult.recommendations.length > 0 && (
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <h4 className="font-semibold text-base mb-3 text-blue-900 flex items-center gap-2">
+                          <Check className="w-5 h-5" />
+                          Recommendations
+                        </h4>
+                        <ul className="space-y-2">
+                          {analysisResult.recommendations.map((rec: string, idx: number) => (
+                            <li key={idx} className="text-sm flex items-start gap-2 text-blue-800">
+                              <span className="text-blue-600 mt-0.5">✓</span>
+                              <span>{rec}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
 
-                      {/* Recommendations */}
-                      {analysisResult.recommendations.length > 0 && (
-                        <div className="space-y-2 mt-3">
-                          <h4 className="font-semibold text-sm">Recommendations:</h4>
-                          <ul className="space-y-1">
-                            {analysisResult.recommendations.slice(0, 5).map((rec: string, idx: number) => (
-                              <li key={idx} className="text-sm flex items-start gap-2">
-                                <Check className="w-4 h-4 mt-0.5 text-green-500 flex-shrink-0" />
-                                <span>{rec}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-
-                      <Alert className="bg-blue-50 border-blue-200 mt-3">
-                        <AlertCircle className="h-4 w-4 text-blue-600" />
-                        <AlertDescription className="text-blue-700 text-sm">
-                          Analysis results have been sent to your notifications
+                    {analysisResult.has_risks && (
+                      <Alert className="bg-purple-50 border-purple-200">
+                        <AlertCircle className="h-4 w-4 text-purple-600" />
+                        <AlertDescription className="text-purple-700 text-sm">
+                          💬 Analysis results have been sent to your notifications
                         </AlertDescription>
                       </Alert>
-                    </motion.div>
-                  )}
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
 
-                  {!wearableSummary?.hasData && (
-                    <p className="text-sm text-gray-500 text-center">
-                      No health data available. Please log your metrics first.
-                    </p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        </div>
-
-        {/* History Section */}
+          {/* History Section */}
         {history.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -561,7 +533,7 @@ export function DevicePage({ user, onNavigate, onLogout, onOpenNotifications }: 
                   Entry History
                 </CardTitle>
                 <CardDescription>
-                  Your recent health data entries ({history.length} total)
+                  Your latest 5 health data entries (showing {Math.min(5, history.length)} of {history.length} total)
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -572,7 +544,7 @@ export function DevicePage({ user, onNavigate, onLogout, onOpenNotifications }: 
                       <p className="text-gray-500">Loading history...</p>
                     </div>
                   ) : (
-                    history.map((entry: any, index: number) => (
+                    history.slice(0, 5).map((entry: any, index: number) => (
                       <div
                         key={entry.id || index}
                         className="p-4 bg-gray-50 rounded-lg border border-gray-200 hover:border-purple-300 transition-colors"
