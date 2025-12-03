@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import {
   MessageCircle,
@@ -22,8 +22,10 @@ import {
 import { Navigation } from './Navigation';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
+import { Card, CardContent } from './ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { AuraHistory } from './AuraHistory';
 import api from '../services/api';
 import type { PageType } from '../App';
 import type { WellnessScore, AuraEntry, DoshaAssessment, EmotionLog, User } from '../types/api.types';
@@ -43,8 +45,6 @@ export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications, onR
   const [streakViewMonth, setStreakViewMonth] = useState(new Date().getMonth());
   const [streakViewYear, setStreakViewYear] = useState(new Date().getFullYear());
   const [currentDosha, setCurrentDosha] = useState<'vata' | 'pitta' | 'kapha'>('vata');
-  const [latestEmotion, setLatestEmotion] = useState<EmotionLog | null>(null);
-  const [dashboardVisited, setDashboardVisited] = useState(false);
 
   // Backend Data State
   const [wellnessData, setWellnessData] = useState<WellnessScore | null>(null);
@@ -62,6 +62,7 @@ export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications, onR
   // Local State
   const [streak, setStreak] = useState<number>(0);
   const [longestStreak, setLongestStreak] = useState<number>(0);
+  const [hasShownMoodPopup, setHasShownMoodPopup] = useState(false);
 
   // Fetch dashboard data on mount
   useEffect(() => {
@@ -99,11 +100,6 @@ export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications, onR
         setStreak(streakData?.current_streak || 0);
         setLongestStreak(streakData?.longest_streak || 0);
         setDynamicAura(latestAura); // Apply dynamic aura gradient and text based on backend response
-        
-        // Get latest emotion
-        if (emotions && emotions.length > 0) {
-          setLatestEmotion(emotions[0]);
-        }
       } catch (error) {
         console.error('Failed to fetch dashboard data:', error);
       } finally {
@@ -114,19 +110,19 @@ export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications, onR
     fetchDashboardData();
     
     // Request mood popup only once per dashboard visit
-    if (onRequestMoodPopup && !dashboardVisited) {
+    if (onRequestMoodPopup && !hasShownMoodPopup) {
       console.log('[Dashboard] Requesting mood popup on mount');
-      setDashboardVisited(true);
+      setHasShownMoodPopup(true);
       setTimeout(() => {
         onRequestMoodPopup();
       }, 1000);
     }
-  }, [onRequestMoodPopup, dashboardVisited]);
+  }, [onRequestMoodPopup, hasShownMoodPopup]);
 
-  // Refetch aura and latest emotion when mood is logged (listen for changes)
+  // Refetch aura and emotions when mood is logged (listen for changes)
   useEffect(() => {
     const handleMoodLogged = async () => {
-      console.log('[Dashboard] Mood logged - refreshing aura and emotion');
+      console.log('[Dashboard] Mood logged - refreshing aura and emotions');
       try {
         const [latestAura, emotions] = await Promise.all([
           api.getAuraFromLatestEmotion(),
@@ -136,9 +132,7 @@ export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications, onR
           })
         ]);
         setDynamicAura(latestAura);
-        if (emotions && emotions.length > 0) {
-          setLatestEmotion(emotions[0]);
-        }
+        setRecentEmotions(emotions);
       } catch (error) {
         console.error('Failed to refresh aura after mood log:', error);
       }
@@ -416,66 +410,11 @@ export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications, onR
         </motion.div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-4 gap-4 mb-6">
-          {/* Latest Emotion - FIRST */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          {/* Wellness Score */}
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.0 }}
-            whileHover={{ scale: 1.02 }}
-            className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-white/50"
-          >
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-3 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-xl">
-                <Heart className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Latest Emotion</p>
-                <p className="text-2xl font-bold text-gray-800">
-                  {(() => {
-                    if (!latestEmotion?.emotion) return 'None';
-                    const emotion = latestEmotion.emotion;
-                    const emotionLabel = emotion.toLowerCase().replace('_', '-');
-                    const emojiMap: Record<string, string> = {
-                      'happy': '😊',
-                      'calm': '😌',
-                      'sad': '😢',
-                      'anxious': '😰',
-                      'tired': '😴',
-                      'frustrated': '😤',
-                      'grateful': '🤗',
-                      'neutral': '😐',
-                      'angry': '😡',
-                      'low-energy': '😔',
-                      'energized': '⚡',
-                      'confused': '😕'
-                    };
-                    const emoji = emojiMap[emotionLabel] || '💫';
-                    const displayName = emotion.charAt(0).toUpperCase() + emotion.slice(1).replace('_', ' ');
-                    return `${emoji} ${displayName}`;
-                  })()}
-                </p>
-              </div>
-            </div>
-            {latestEmotion ? (
-              <div className="space-y-1">
-                <p className="text-xs text-gray-600">
-                  Intensity: <span className="font-semibold">{latestEmotion.intensity || 'N/A'}/10</span>
-                </p>
-                <p className="text-xs text-gray-600">
-                  Logged: <span className="font-semibold">{new Date(latestEmotion.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                </p>
-              </div>
-            ) : (
-              <p className="text-xs text-gray-600">No emotion logged today</p>
-            )}
-          </motion.div>
-
-          {/* Wellness Score - SECOND */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.1 }}
             whileHover={{ scale: 1.02 }}
             className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-white/50"
           >
@@ -508,11 +447,11 @@ export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications, onR
             </div>
           </motion.div>
 
-          {/* Streak Counter - THIRD */}
+          {/* Streak Counter */}
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.2 }}
+            transition={{ delay: 0.1 }}
             whileHover={{ scale: 1.02 }}
             onClick={() => setShowStreakCalendar(true)}
             className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-white/50 cursor-pointer"
@@ -529,11 +468,11 @@ export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications, onR
             <p className="text-xs text-gray-600">Click to view calendar</p>
           </motion.div>
 
-          {/* Aura Status - FOURTH */}
+          {/* Aura Status */}
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.3 }}
+            transition={{ delay: 0.2 }}
             whileHover={{ scale: 1.02 }}
             className={`bg-gradient-to-br ${currentAura.bgGradient} backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-white/50`}
           >
@@ -544,7 +483,7 @@ export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications, onR
               <div>
                 <p className="text-sm text-gray-600">Aura Energy</p>
                 <p className="text-3xl font-bold text-gray-800">
-                  {auraData ? Math.min(Math.round(auraData.intensity * 100), 100) : 0}%
+                  {auraData ? Math.round(auraData.intensity * 100) : 0}%
                 </p>
               </div>
             </div>
@@ -907,6 +846,37 @@ export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications, onR
                 </motion.button>
               </div>
             </div>
+          </div>
+        </motion.div>
+
+        {/* Quick Actions - REMOVED */}
+        {/* Quick Actions */
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
+          className="mb-6"
+        >
+          <h2 className="text-xl font-semibold text-gray-800 mb-4">Quick Actions</h2>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            {quickActions.map((action, index) => (
+              <motion.button
+                key={action.id + action.label}
+                onClick={() => onNavigate(action.id)}
+                className={`bg-gradient-to-br ${action.bgGradient} rounded-xl p-4 shadow-md hover:shadow-lg transition-all`}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.4 + index * 0.05 }}
+              >
+                <div className={`p-3 bg-gradient-to-br ${action.gradient} rounded-lg mb-2 mx-auto w-fit`}>
+                  <action.icon className="w-6 h-6 text-white" />
+                </div>
+                <p className="text-sm font-medium text-gray-700">{action.label}</p>
+                <p className="text-xs text-gray-500">{action.description}</p>
+              </motion.button>
+            ))}
           </div>
         </motion.div>
 

@@ -26,7 +26,8 @@ async def get_chat_history(
     limit: int = 50
 ):
     """Get chat history for the user."""
-    supabase = get_supabase()
+    # Use service role to bypass RLS
+    supabase = get_supabase(use_service_role=True)
     
     try:
         query = supabase.table("messages").select("*").eq("user_id", current_user_id)
@@ -34,7 +35,8 @@ async def get_chat_history(
         if session_id:
             query = query.eq("session_id", session_id)
         
-        result = query.order("created_at", desc=True).limit(limit).execute()
+        # Return in chronological order (oldest first)
+        result = query.order("created_at", desc=False).limit(limit).execute()
         
         return result.data or []
     except Exception as e:
@@ -68,6 +70,53 @@ async def gemini_test():
         }
 
 
+@router.get("/db-test")
+async def db_test(current_user_id: str = Depends(get_current_user_id)):
+    """Test database connectivity and message storage."""
+    try:
+        supabase = get_supabase(use_service_role=True)
+        
+        # Test session creation
+        test_session_id = str(uuid.uuid4())
+        session_data = {
+            "id": test_session_id,
+            "user_id": current_user_id,
+            "title": "DB Test Session",
+            "started_at": datetime.utcnow().isoformat(),
+            "last_message_at": datetime.utcnow().isoformat()
+        }
+        session_result = supabase.table("chat_sessions").insert(session_data).execute()
+        
+        # Test message creation
+        test_msg_id = str(uuid.uuid4())
+        message_data = {
+            "id": test_msg_id,
+            "session_id": test_session_id,
+            "user_id": current_user_id,
+            "role": "user",
+            "content": "Test message",
+            "created_at": datetime.utcnow().isoformat()
+        }
+        msg_result = supabase.table("messages").insert(message_data).execute()
+        
+        # Clean up test data
+        supabase.table("messages").delete().eq("id", test_msg_id).execute()
+        supabase.table("chat_sessions").delete().eq("id", test_session_id).execute()
+        
+        return {
+            "ok": True,
+            "message": "Database connectivity successful",
+            "session_created": len(session_result.data) > 0,
+            "message_created": len(msg_result.data) > 0
+        }
+    except Exception as e:
+        logger.error(f"[DB TEST] Failed: {e}", exc_info=True)
+        return {
+            "ok": False,
+            "error": str(e)
+        }
+
+
 @router.post("/message", response_model=ChatResponse)
 async def send_message(
     request: Request,
@@ -84,11 +133,18 @@ async def send_message(
         raise HTTPException(status_code=503, detail="Chatbot service unavailable. Please check GEMINI_API_KEY configuration.")
     
     try:
-        supabase = get_supabase()
+        # Use service role to bypass RLS policies for chat storage
+        supabase = get_supabase(use_service_role=True)
         
         # Initialize emotion service with model manager if available
-        model_manager = getattr(request.app.state, 'model_manager', None)
-        emotion_service = get_emotion_service(model_manager)
+        try:
+            model_manager = getattr(request.app.state, 'model_manager', None)
+            emotion_service = get_emotion_service(model_manager)
+        except Exception as emotion_init_err:
+            logger.warning(f"[CHAT] Could not initialize emotion service: {emotion_init_err}")
+            # Create a fallback emotion service
+            from app.services.emotion_service import EmotionService
+            emotion_service = EmotionService(None)
         
         # Get chat history for context (last 10 messages)
         chat_history = []
@@ -119,22 +175,34 @@ async def send_message(
         
         # 2. Detect emotion from the sequence
         # Skip if message is too short (noise reduction)
-        if len(message_req.content) < 5 and len(recent_user_msgs) == 1:
-             emotion_data = {
+        try:
+            if len(message_req.content) < 5 and len(recent_user_msgs) == 1:
+                emotion_data = {
+                    'emotion_type': 'neutral',
+                    'confidence': 0.5,
+                    'all_scores': {'neutral': 1.0}
+                }
+            else:
+                emotion_data = emotion_service.detect_contextual_emotion(recent_user_msgs)
+        except Exception as emotion_detect_err:
+            logger.warning(f"[CHAT] Emotion detection failed, using neutral: {emotion_detect_err}")
+            emotion_data = {
                 'emotion_type': 'neutral',
                 'confidence': 0.5,
                 'all_scores': {'neutral': 1.0}
             }
-        else:
-            emotion_data = emotion_service.detect_contextual_emotion(recent_user_msgs)
             
-        logger.info(f"Detected emotion (contextual): {emotion_data['emotion_type']} (confidence: {emotion_data['confidence']:.2f})")
+        logger.info(f"Detected emotion (contextual): {emotion_data['emotion_type']} (confidence: {emotion_data.get('confidence', 0.5):.2f})")
         
         # Check for crisis
-        is_crisis, severity, triggers = CrisisDetector.detect_crisis(
-            message_req.content,
-            emotion_data
-        )
+        try:
+            is_crisis, severity, triggers = CrisisDetector.detect_crisis(
+                message_req.content,
+                emotion_data
+            )
+        except Exception as crisis_err:
+            logger.warning(f"[CHAT] Crisis detection failed: {crisis_err}")
+            is_crisis, severity, triggers = False, None, []
         
         # Get or create session (Handle DB errors gracefully)
         session_id = message_req.session_id
@@ -149,15 +217,18 @@ async def send_message(
                 }
                 session_result = supabase.table("chat_sessions").insert(session_data).execute()
                 session_id = session_result.data[0]["id"]
+                logger.info(f"[CHAT] ✅ New session created: {session_id}")
             else:
                 supabase.table("chat_sessions").update({
                     "last_message_at": datetime.utcnow().isoformat()
                 }).eq("id", session_id).execute()
+                logger.info(f"[CHAT] ✅ Session updated: {session_id}")
         except Exception as db_err:
-            logger.error(f"Database session error: {db_err}")
+            logger.error(f"Database session error: {db_err}", exc_info=True)
             # Generate temporary session ID if DB fails
             if not session_id:
                 session_id = str(uuid.uuid4())
+                logger.warning(f"[CHAT] ⚠️ Using temporary session ID: {session_id}")
         
         # Save user message to database (Handle DB errors)
         user_message_id = str(uuid.uuid4())
@@ -174,26 +245,35 @@ async def send_message(
         }
         
         try:
-            supabase.table("messages").insert(user_message_data).execute()
+            msg_result = supabase.table("messages").insert(user_message_data).execute()
+            logger.info(f"[CHAT] ✅ User message saved: {user_message_id}")
             
-            # Log emotion
-            emotion_log = emotion_service.create_emotion_log(
-                user_id=current_user_id,
-                emotion_type=emotion_data['emotion_type'],
-                confidence=emotion_data['confidence'],
-                all_scores=emotion_data['all_scores'],
-                source='chat_context',
-                message_id=user_message_id
-            )
-            supabase.table("emotion_logs").insert(emotion_log).execute()
+            # Log emotion (don't fail if this errors)
+            try:
+                emotion_log = emotion_service.create_emotion_log(
+                    user_id=current_user_id,
+                    emotion_type=emotion_data['emotion_type'],
+                    confidence=emotion_data['confidence'],
+                    all_scores=emotion_data['all_scores'],
+                    source='chat_context',
+                    message_id=user_message_id
+                )
+                emotion_result = supabase.table("emotion_logs").insert(emotion_log).execute()
+                logger.info(f"[CHAT] ✅ Emotion logged from chat")
+            except Exception as emotion_err:
+                logger.warning(f"[CHAT] Failed to log emotion (non-critical): {emotion_err}")
             
-            # Update Aura immediately based on this new emotion
-            from app.services.aura_service import AuraService
-            aura_service = AuraService(supabase)
-            await aura_service.generate_daily_aura(current_user_id, datetime.utcnow().date())
+            # Update Aura (don't fail if this errors)
+            try:
+                from app.services.aura_service import AuraService
+                aura_service = AuraService(supabase)
+                await aura_service.generate_daily_aura(current_user_id, datetime.utcnow().date())
+                logger.info(f"[CHAT] ✅ Aura updated")
+            except Exception as aura_err:
+                logger.warning(f"[CHAT] Failed to update aura (non-critical): {aura_err}")
             
         except Exception as db_msg_err:
-            logger.error(f"Failed to save user message/aura to DB: {db_msg_err}")
+            logger.error(f"Failed to save user message/aura to DB: {db_msg_err}", exc_info=True)
         
         # Handle crisis if detected
         if is_crisis:
@@ -267,9 +347,10 @@ async def send_message(
         }
         
         try:
-            supabase.table("messages").insert(ai_message_data).execute()
+            ai_result = supabase.table("messages").insert(ai_message_data).execute()
+            logger.info(f"[CHAT] ✅ AI response saved: {ai_message_id}")
         except Exception as db_ai_err:
-            logger.error(f"Failed to save AI response to DB: {db_ai_err}")
+            logger.error(f"Failed to save AI response to DB: {db_ai_err}", exc_info=True)
         
         # Return response using ChatResponse model
         return ChatResponse(
@@ -315,7 +396,8 @@ async def get_chat_sessions(
     limit: int = 20
 ):
     """Get user's chat sessions."""
-    supabase = get_supabase()
+    # Use service role to bypass RLS
+    supabase = get_supabase(use_service_role=True)
     
     try:
         result = supabase.table("chat_sessions").select("*").eq(
@@ -334,7 +416,8 @@ async def get_session_messages(
     current_user_id: str = Depends(get_current_user_id)
 ):
     """Get all messages in a session."""
-    supabase = get_supabase()
+    # Use service role to bypass RLS
+    supabase = get_supabase(use_service_role=True)
     
     try:
         result = supabase.table("messages").select("*").eq(

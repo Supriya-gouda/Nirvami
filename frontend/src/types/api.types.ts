@@ -108,11 +108,15 @@ export interface ChatSession {
 export interface EmotionLog {
   id: string;
   user_id: string;
-  emotion: string;
-  intensity: number;
+  emotion?: string; // Legacy field
+  emotion_type?: string; // New field from backend
+  intensity?: number;
+  confidence?: number; // From backend
+  all_scores?: Record<string, number>;
   trigger?: string;
   notes?: string;
   detected_from?: 'text' | 'voice' | 'manual';
+  source?: 'text' | 'voice' | 'manual'; // New field from backend
   created_at: string;
 }
 

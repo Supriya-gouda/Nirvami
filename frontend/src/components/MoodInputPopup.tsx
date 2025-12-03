@@ -12,16 +12,20 @@ interface MoodInputPopupProps {
   onMoodSubmitted: () => void;
 }
 
-// Exact mood options as specified: ["joy","sadness","anger","fear","anxiety","stress","calm","neutral"]
+// Updated mood options matching the provided UI design - all emojis are unique
 const moodOptions = [
-  { value: 'joy', label: 'Joy', emoji: '😊', color: 'from-yellow-400 to-orange-400' },
-  { value: 'sadness', label: 'Sadness', emoji: '😢', color: 'from-blue-500 to-indigo-600' },
-  { value: 'anger', label: 'Anger', emoji: '😠', color: 'from-red-500 to-red-700' },
-  { value: 'fear', label: 'Fear', emoji: '😨', color: 'from-purple-500 to-indigo-700' },
-  { value: 'anxiety', label: 'Anxiety', emoji: '😰', color: 'from-yellow-500 to-red-500' },
-  { value: 'stress', label: 'Stress', emoji: '😓', color: 'from-orange-500 to-red-600' },
+  { value: 'happy', label: 'Happy', emoji: '😊', color: 'from-yellow-400 to-orange-400' },
   { value: 'calm', label: 'Calm', emoji: '😌', color: 'from-blue-400 to-cyan-400' },
+  { value: 'sad', label: 'Sad', emoji: '😢', color: 'from-blue-500 to-indigo-600' },
+  { value: 'anxious', label: 'Anxious', emoji: '😰', color: 'from-yellow-500 to-red-500' },
+  { value: 'tired', label: 'Tired', emoji: '😴', color: 'from-purple-400 to-purple-600' },
+  { value: 'frustrated', label: 'Frustrated', emoji: '😤', color: 'from-orange-500 to-red-600' },
+  { value: 'grateful', label: 'Grateful', emoji: '🤗', color: 'from-pink-400 to-rose-400' },
   { value: 'neutral', label: 'Neutral', emoji: '😐', color: 'from-gray-400 to-gray-500' },
+  { value: 'angry', label: 'Angry', emoji: '😡', color: 'from-red-500 to-red-700' },
+  { value: 'low-energy', label: 'Low Energy', emoji: '😔', color: 'from-indigo-400 to-indigo-600' },
+  { value: 'energized', label: 'Energized', emoji: '⚡', color: 'from-yellow-300 to-amber-400' },
+  { value: 'confused', label: 'Confused', emoji: '😕', color: 'from-purple-500 to-indigo-700' },
 ];
 
 export function MoodInputPopup({ isOpen, onClose, onMoodSubmitted }: MoodInputPopupProps) {
@@ -53,15 +57,24 @@ export function MoodInputPopup({ isOpen, onClose, onMoodSubmitted }: MoodInputPo
       });
 
       if (response.ok) {
-        toast.success('Mood saved successfully!');
-        onMoodSubmitted();
-        onClose();
+        toast.success('Mood saved! Your aura is updating...');
         
-        // Reset form
-        setSelectedMood(null);
-        setIntensity(5);
-        setEnergy(null);
-        setNotes('');
+        // Dispatch custom event for Dashboard to listen
+        window.dispatchEvent(new CustomEvent('moodLogged'));
+        
+        // Trigger aura refresh in parent components
+        onMoodSubmitted();
+        
+        // Close popup after short delay to let user see success
+        setTimeout(() => {
+          onClose();
+          
+          // Reset form
+          setSelectedMood(null);
+          setIntensity(5);
+          setEnergy(null);
+          setNotes('');
+        }, 800);
       } else {
         toast.error(response.detail || 'Failed to save mood');
       }
@@ -185,27 +198,6 @@ export function MoodInputPopup({ isOpen, onClose, onMoodSubmitted }: MoodInputPo
               >
                 Clear energy level
               </button>
-            </motion.div>
-          )}
-
-          {/* Optional Notes */}
-          {selectedMood && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
-              className="space-y-2"
-            >
-              <label className="text-sm font-medium text-gray-700">
-                Add a note (optional)
-              </label>
-              <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="What's on your mind?"
-                rows={3}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none resize-none"
-              />
             </motion.div>
           )}
 

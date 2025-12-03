@@ -330,71 +330,26 @@ class ApiService {
     source: string;
   }): Promise<{ ok: boolean; emotion_log_id?: string; detail?: string }> {
     try {
-      // Get current user from Supabase session
-      const { data: sessionData } = await this.supabase.auth.getSession();
-      if (!sessionData.session) {
-        throw new Error('Not authenticated');
-      }
+      console.log('[API] logMoodFromPopup called with:', data);
 
-      // Map mood to emotion_type and create all_scores
-      // Mood options: joy, sadness, anger, fear, anxiety, stress, calm, neutral
-      const moodToEmotion: Record<string, string> = {
-        'joy': 'joy',
-        'sadness': 'sadness',
-        'anger': 'anger',
-        'fear': 'fear',
-        'anxiety': 'fear', // anxiety maps to fear
-        'stress': 'anger', // stress maps to anger
-        'calm': 'joy', // calm maps to joy
-        'neutral': 'neutral'
-      };
+      // Use the backend endpoint - this ensures profile exists and handles all validations
+      const response = await this.api.post('/emotions/log', {
+        mood: data.mood,
+        intensity: data.intensity,
+        energy: data.energy,
+        notes: data.notes,
+        source: data.source
+      });
 
-      const emotion_type = moodToEmotion[data.mood] || data.mood;
-      const confidence = data.intensity / 10; // Convert 1-10 scale to 0-1 confidence
+      console.log('[API] Mood logged successfully via backend:', response.data);
 
-      // Create all_scores object with the selected mood having highest score
-      const all_scores: Record<string, number> = {
-        'joy': 0.0,
-        'sadness': 0.0,
-        'anger': 0.0,
-        'fear': 0.0,
-        'surprise': 0.0,
-        'neutral': 0.0
-      };
-      all_scores[emotion_type] = confidence;
-
-      // Insert directly into Supabase emotion_logs table
-      const { data: insertData, error } = await this.supabase
-        .from('emotion_logs')
-        .insert({
-          user_id: sessionData.session.user.id,
-          emotion_type: emotion_type,
-          confidence: confidence,
-          all_scores: all_scores,
-          mood: data.mood,
-          intensity: data.intensity,
-          energy: data.energy,
-          notes: data.notes,
-          source: data.source,
-          logged_at: new Date().toISOString(),
-        })
-        .select('id')
-        .single();
-
-      if (error) {
-        console.error('Supabase insert error:', error);
-        throw new Error(error.message);
-      }
-
-      return {
-        ok: true,
-        emotion_log_id: insertData.id,
-      };
+      return response.data;
     } catch (error: any) {
-      console.error('Failed to log mood:', error);
+      console.error('[API] Failed to log mood:', error);
+      const errorDetail = error.response?.data?.detail || error.message || 'Failed to save mood';
       return {
         ok: false,
-        detail: error.message || 'Failed to save mood',
+        detail: errorDetail,
       };
     }
   }
@@ -402,6 +357,18 @@ class ApiService {
   async getEmotionLogs(params?: DateRangeParams): Promise<EmotionLog[]> {
     const response = await this.api.get<EmotionLog[]>('/emotions/history', { params });
     return response.data;
+  }
+
+  async getLatestEmotion(): Promise<EmotionLog | null> {
+    try {
+      console.log('[API] Fetching latest emotion...');
+      const response = await this.api.get('/emotions/latest');
+      console.log('[API] Latest emotion response:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('[API] Error fetching latest emotion:', error);
+      return null;
+    }
   }
 
   async getEmotionAnalytics(params?: DateRangeParams): Promise<EmotionAnalytics> {
@@ -421,6 +388,22 @@ class ApiService {
 
   // ==================== Aura Methods ====================
 
+  async getCurrentAura(): Promise<{
+    auraName: string;
+    emotionLabel: string;
+    colorCode: string;
+    gradient: string[];
+    traits: string[];
+    description: string;
+    chakra: string;
+    element: string;
+    intensity: number;
+    updatedAt: string;
+  }> {
+    const response = await this.api.get('/aura/current');
+    return response.data;
+  }
+
   async getAuraFromLatestEmotion(): Promise<{
     auraName: string;
     emotionLabel: string;
@@ -432,6 +415,7 @@ class ApiService {
     element: string;
     intensity: number;
   }> {
+    // Deprecated: Use getCurrentAura() instead
     const response = await this.api.get('/aura/from-latest-emotion');
     return response.data;
   }

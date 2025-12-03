@@ -68,6 +68,7 @@ export function ChatbotPage({ user, onNavigate, onLogout, onOpenNotifications }:
       try {
         const history = await api.getChatHistory(sessionId);
         if (history.length > 0) {
+          // History comes in chronological order (ASC) from API
           const formattedMessages: Message[] = history.map((msg) => ({
             id: msg.id,
             text: msg.content,
@@ -76,7 +77,9 @@ export function ChatbotPage({ user, onNavigate, onLogout, onOpenNotifications }:
             emotion: msg.emotion_detected,
             crisisDetected: msg.crisis_detected,
           }));
-          setMessages((prev) => [...prev, ...formattedMessages]);
+          
+          // Replace the initial greeting with actual chat history
+          setMessages(formattedMessages);
         }
       } catch (error) {
         console.error('Failed to load chat history:', error);
@@ -86,7 +89,7 @@ export function ChatbotPage({ user, onNavigate, onLogout, onOpenNotifications }:
     if (api.isAuthenticated()) {
       loadChatHistory();
     }
-  }, []);
+  }, [sessionId]); // Re-load when sessionId changes
 
   const handleSendMessage = async (text: string) => {
     if (!text.trim() || isLoading) return;

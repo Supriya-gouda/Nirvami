@@ -29,6 +29,7 @@ function App() {
   const [currentPage, setCurrentPage] = useState<PageType>('landing');
   const [showMoodPopup, setShowMoodPopup] = useState(false);
   const [showNotificationCenter, setShowNotificationCenter] = useState(false);
+  const [auraRefreshTrigger, setAuraRefreshTrigger] = useState(0);
   
   // Track last popup time and user activity to prevent spam
   const lastPopupTimeRef = useRef<number>(0);
@@ -191,7 +192,9 @@ function App() {
     setShowMoodPopup(false);
     lastPopupTimeRef.current = Date.now(); // Update last popup time
     lastActivityTimeRef.current = Date.now(); // Reset activity timer
-    // No need for localStorage, backend tracks it
+    // Trigger aura refresh in child components
+    setAuraRefreshTrigger(prev => prev + 1);
+    console.log('[App] Mood submitted - aura refresh triggered');
   };
 
   // Show loading state while checking auth
@@ -221,7 +224,7 @@ function App() {
           onNavigateToSignIn={() => setCurrentPage('signin')}
         />
       )}
-      {currentPage === 'dashboard' && <Dashboard user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} onRequestMoodPopup={() => checkAndShowMoodPopup(true)} />}
+      {currentPage === 'dashboard' && <Dashboard user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} onRequestMoodPopup={() => checkAndShowMoodPopup(true)} refreshTrigger={auraRefreshTrigger} />}
       {currentPage === 'chatbot' && <ChatbotPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
       {currentPage === 'conversation-history' && <ConversationHistoryPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
       {currentPage === 'manual' && <LogPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
@@ -230,7 +233,7 @@ function App() {
       {currentPage === 'diet' && <DietMoodPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
       {currentPage === 'progress' && <ProgressAnalyticsPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
       {currentPage === 'emotion-history' && <EmotionHistoryPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
-      {currentPage === 'aura' && <AuraVisualizationPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
+      {currentPage === 'aura' && <AuraVisualizationPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} refreshTrigger={auraRefreshTrigger} />}
       {currentPage === 'device' && <DevicePage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
       {currentPage === 'dosha' && <DoshaQuizPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
       {currentPage === 'routines' && <DailyRoutinesPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}

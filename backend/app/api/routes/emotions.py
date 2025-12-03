@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse
 from app.utils.auth import get_current_user_id
 from app.utils.database import get_supabase
 from app.models.schemas import EmotionDetectionResponse, EmotionLog, EmotionAggregate
+from app.api.routes.aura import create_aura_entry_from_emotion
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime, date, timedelta
@@ -13,6 +14,56 @@ import uuid
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def ensure_user_profile(supabase, user_id: str, email: str = None):
+    """Ensure user has a profile record. Create if doesn't exist."""
+    try:
+        # Check if profile exists
+        result = supabase.table("profiles").select("id").eq("id", user_id).execute()
+        
+        if not result.data or len(result.data) == 0:
+            # Get email from auth user if not provided
+            if not email:
+                try:
+                    auth_user = supabase.auth.admin.get_user_by_id(user_id)
+                    if auth_user and auth_user.user:
+                        email = auth_user.user.email
+                except Exception as e:
+                    logger.warning(f"Could not get email for user {user_id}: {e}")
+                    email = f"user_{user_id[:8]}@nirvami.app"
+            
+            # Create profile
+            logger.info(f"Creating profile for user {user_id} with email {email}")
+            profile_data = {
+                "id": user_id,
+                "email": email,
+                "consent_data_collection": True,
+                "consent_ai_processing": True,
+                "consent_notifications": True
+            }
+            insert_result = supabase.table("profiles").insert(profile_data).execute()
+            logger.info(f"✅ Profile created for user {user_id}")
+            
+            # Also create user_preferences entry
+            try:
+                pref_data = {
+                    "user_id": user_id,
+                    "notification_email": True,
+                    "notification_sms": False,
+                    "notification_push": True,
+                    "crisis_alerts_enabled": True,
+                    "data_retention_days": 365,
+                    "preferences": {}
+                }
+                supabase.table("user_preferences").insert(pref_data).execute()
+                logger.info(f"✅ User preferences created for user {user_id}")
+            except Exception as pref_error:
+                logger.warning(f"Failed to create user_preferences: {pref_error}")
+    except Exception as e:
+        logger.error(f"Error ensuring profile exists: {e}", exc_info=True)
+        # Don't fail the request if profile creation fails
+        pass
 
 
 class LogEmotionRequest(BaseModel):
@@ -34,9 +85,13 @@ async def log_emotion(
     
     Supports both legacy format (emotion, detected_from) and new mood popup format (mood, source).
     """
-    supabase = get_supabase()
+    # Use service role to bypass RLS policies
+    supabase = get_supabase(use_service_role=True)
     
     try:
+        # CRITICAL: Ensure user profile exists before inserting emotion log
+        ensure_user_profile(supabase, current_user_id)
+        
         # Determine if this is new mood popup format or legacy format
         is_mood_popup = data.mood is not None or data.source is not None
         
@@ -53,8 +108,11 @@ async def log_emotion(
                     content={"ok": False, "detail": "intensity must be between 1 and 10"}
                 )
             
-            # Validate mood value
-            valid_moods = ["joy", "sadness", "anger", "fear", "anxiety", "stress", "calm", "neutral"]
+            # Validate mood value - updated to match all frontend moods
+            valid_moods = [
+                "happy", "calm", "sad", "anxious", "tired", "frustrated",
+                "grateful", "neutral", "angry", "low-energy", "energized", "confused"
+            ]
             if data.mood not in valid_moods:
                 return JSONResponse(
                     status_code=400,
@@ -116,6 +174,15 @@ async def log_emotion(
             emotion_log_id = result.data[0]["id"]
             logger.info(f"Emotion logged for user {current_user_id}: {emotion_type} (source: {source})")
             
+            # CRITICAL: Create/update aura_entry IMMEDIATELY based on this emotion
+            # This triggers the real-time aura color update in the UI
+            try:
+                aura_entry = await create_aura_entry_from_emotion(current_user_id, emotion_type, data.intensity / 10.0, supabase)
+                logger.info(f"✅ Aura color updated to {aura_entry.get('color_code') if aura_entry else 'unknown'} for user {current_user_id}")
+            except Exception as aura_err:
+                logger.error(f"❌ Failed to create aura entry: {aura_err}")
+                # Don't fail the emotion log if aura creation fails
+            
             # Return new API contract format for mood popup, legacy format otherwise
             if is_mood_popup:
                 return JSONResponse(
@@ -151,12 +218,45 @@ async def log_emotion(
         )
 
 
+@router.get("/latest")
+async def get_latest_emotion(
+    current_user_id: str = Depends(get_current_user_id)
+):
+    """Get the most recent emotion log for user."""
+    # Use service role to bypass RLS
+    supabase = get_supabase(use_service_role=True)
+    
+    try:
+        result = supabase.table("emotion_logs").select("*").eq(
+            "user_id", current_user_id
+        ).order("created_at", desc=True).limit(1).execute()
+        
+        if not result.data or len(result.data) == 0:
+            return None
+        
+        log = result.data[0]
+        
+        # Transform to match frontend interface
+        return {
+            "id": log["id"],
+            "user_id": log["user_id"],
+            "emotion_type": log.get("emotion_type", "neutral"),
+            "confidence": log.get("confidence", 0.5),
+            "all_scores": log.get("all_scores", {}),
+            "source": log.get("source", "manual"),
+            "created_at": log["created_at"]
+        }
+    except Exception as e:
+        logger.error(f"Error fetching latest emotion: {e}", exc_info=True)
+        return None
+
+
 @router.get("/today/logged")
 async def check_mood_logged_today(
     current_user_id: str = Depends(get_current_user_id)
 ):
     """Check if user has logged mood today."""
-    supabase = get_supabase()
+    supabase = get_supabase(use_service_role=True)
     
     try:
         today = date.today().isoformat()
@@ -192,7 +292,7 @@ async def get_emotion_logs(
     limit: int = 100
 ):
     """Get emotion logs for user."""
-    supabase = get_supabase()
+    supabase = get_supabase(use_service_role=True)
     
     try:
         # Use start_date if provided, otherwise calculate from days
@@ -244,7 +344,7 @@ async def get_emotion_aggregates(
     days: int = 30
 ):
     """Get daily emotion aggregates."""
-    supabase = get_supabase()
+    supabase = get_supabase(use_service_role=True)
     
     try:
         since_date = (date.today() - timedelta(days=days)).isoformat()
@@ -264,7 +364,7 @@ async def check_mood_logged_today(
     current_user_id: str = Depends(get_current_user_id)
 ):
     """Check if user has logged a mood today via manual entry or mood popup."""
-    supabase = get_supabase()
+    supabase = get_supabase(use_service_role=True)
     today_date = date.today().isoformat()
     
     try:

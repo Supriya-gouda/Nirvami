@@ -10,131 +10,248 @@ logger = logging.getLogger(__name__)
 class AuraService:
     """Service for generating and managing aura visualizations."""
     
-    # Color Therapy Palette (Mental Health + Ayurveda)
-    COLOR_THERAPY_PALETTE = {
-        "red": {
-            "hex": "#E53935",
-            "name": "red",
-            "keywords": ["energy", "courage", "grounding"],
-            "supports": ["lethargy", "lack_of_motivation", "feeling_stuck"],
-            "avoid_when": ["high_anxiety", "anger_outburst"],
-            "chakra": "root",
-            "element": "Fire"
+    # Comprehensive Aura Mapping based on mood/emotional state
+    AURA_MAPPINGS = {
+        "balanced_calm": {
+            "name": "Balanced & Calm",
+            "color_code": "green-blue",
+            "gradient": ["#66BB6A", "#42A5F5", "#26A69A"],
+            "why": "Green and blue represent emotional balance, healing, and serenity. They appear when the nervous system is regulated and the mind is stable.",
+            "what_it_does": "Reduces internal tension, encourages compassion and harmony, supports steady breathing and calmness",
+            "purpose": "Restore emotional equilibrium, promote peaceful grounded energy, strengthen resilience",
+            "chakra": "Heart + Throat",
+            "element": "Air",
+            "triggers": ["calm", "peace", "relaxed", "balanced", "serene"]
         },
-        "orange": {
-            "hex": "#FB8C00",
-            "name": "orange",
-            "keywords": ["joy", "playfulness", "connection"],
-            "supports": ["social_isolation", "low_fun", "creative_block"],
-            "avoid_when": ["sensory_overload"],
-            "chakra": "sacral",
-            "element": "Fire"
+        "energized_active": {
+            "name": "Energized & Active",
+            "color_code": "yellow",
+            "gradient": ["#FDD835", "#FFEB3B", "#FBC02D"],
+            "why": "Yellow represents vitality, alertness, and internal fire. It appears when motivation and physical energy are high.",
+            "what_it_does": "Boosts enthusiasm, enhances confidence & optimism, activates personal power",
+            "purpose": "Support active movement, encourage productivity & engagement, strengthen creative flow",
+            "chakra": "Solar Plexus",
+            "element": "Fire",
+            "triggers": ["energetic", "active", "motivated", "enthusiastic", "alert"]
         },
-        "yellow": {
-            "hex": "#FDD835",
-            "name": "yellow",
-            "keywords": ["optimism", "clarity", "confidence"],
-            "supports": ["low_mood", "brain_fog"],
-            "avoid_when": ["panic", "migraine"],
-            "chakra": "solar_plexus",
-            "element": "Fire"
+        "stressed_anxious": {
+            "name": "Stressed & Anxious",
+            "color_code": "red",
+            "gradient": ["#E53935", "#D32F2F", "#C62828"],
+            "why": "Red signifies overstimulation of the root chakra — fight-or-flight activation.",
+            "what_it_does": "Exposes emotional overload, reveals inner turbulence, highlights the need for grounding",
+            "purpose": "Warn the user of high stress, encourage grounding practices, bring awareness to emotional imbalance",
+            "chakra": "Root",
+            "element": "Fire + Air imbalance",
+            "triggers": ["stress", "anxiety", "anxious", "worried", "tense", "nervous"]
         },
-        "green": {
-            "hex": "#66BB6A",
-            "name": "green",
-            "keywords": ["balance", "healing", "compassion"],
-            "supports": ["burnout_recovery", "emotional_healing"],
-            "avoid_when": [],
-            "chakra": "heart",
-            "element": "Earth"
+        "focused_sharp": {
+            "name": "Focused & Sharp",
+            "color_code": "indigo",
+            "gradient": ["#3F51B5", "#303F9F", "#1A237E"],
+            "why": "Indigo activates the third eye, representing insight, clarity, and deep mental focus.",
+            "what_it_does": "Enhances problem-solving, increases perception, deepens intuition",
+            "purpose": "Support concentration, align intellect with wisdom, strengthen clarity of thought",
+            "chakra": "Third Eye",
+            "element": "Ether",
+            "triggers": ["focused", "concentrated", "sharp", "clear-minded", "attentive"]
         },
-        "blue": {
-            "hex": "#42A5F5",
-            "name": "blue",
-            "keywords": ["calm", "trust", "communication"],
-            "supports": ["stress", "overthinking"],
-            "avoid_when": ["emotional_numbness"],
-            "chakra": "throat",
-            "element": "Water"
+        "tired_drained": {
+            "name": "Tired & Drained",
+            "color_code": "blue-grey",
+            "gradient": ["#90A4AE", "#78909C", "#546E7A"],
+            "why": "Blue-grey symbolizes low vitality, fatigue, and energy depletion.",
+            "what_it_does": "Indicates the need for rest, slows mental pacing, encourages recovery",
+            "purpose": "Promote recuperation, reduce mental strain, guide user toward self-care",
+            "chakra": "Throat",
+            "element": "Water",
+            "triggers": ["tired", "exhausted", "drained", "fatigued", "weary", "low-energy"]
         },
-        "teal": {
-            "hex": "#26A69A",
-            "name": "teal",
-            "keywords": ["emotional_healing", "safety"],
-            "supports": ["vulnerability", "processing_feelings"],
-            "avoid_when": [],
-            "chakra": "heart_throat_bridge",
-            "element": "Water"
+        "joyful_happy": {
+            "name": "Joyful & Happy",
+            "color_code": "yellow",
+            "gradient": ["#FFEB3B", "#FDD835", "#FBC02D"],
+            "why": "Yellow radiates positivity, lightness, and emotional warmth.",
+            "what_it_does": "Lifts mood, enhances creativity, expands emotional openness",
+            "purpose": "Encourage engagement, support social connection, reinforce emotional wellness",
+            "chakra": "Solar Plexus",
+            "element": "Fire",
+            "triggers": ["joy", "happy", "happiness", "cheerful", "delighted", "pleased"]
         },
-        "violet": {
-            "hex": "#8E24AA",
-            "name": "violet",
-            "keywords": ["insight", "intuition", "transformation"],
-            "supports": ["big_questions", "meaning_search"],
-            "avoid_when": ["disconnected_from_body"],
-            "chakra": "third_eye_crown",
-            "element": "Ether"
+        "sad_low": {
+            "name": "Sad & Low",
+            "color_code": "deep-blue",
+            "gradient": ["#1976D2", "#1565C0", "#0D47A1"],
+            "why": "Deep blue reflects emotional heaviness, introspection, and longing.",
+            "what_it_does": "Encourages emotional release, promotes reflection & healing, slows emotional turbulence",
+            "purpose": "Support grief processing, bring emotional comfort, create safe emotional space",
+            "chakra": "Throat + Crown",
+            "element": "Water",
+            "triggers": ["sadness", "sad", "down", "low", "melancholy", "gloomy", "blue"]
         },
-        "pink": {
-            "hex": "#EC407A",
-            "name": "pink",
-            "keywords": ["self_love", "gentleness"],
-            "supports": ["self_criticism", "shame", "loneliness"],
-            "avoid_when": [],
-            "chakra": "heart",
-            "element": "Water"
+        "angry_frustrated": {
+            "name": "Angry & Frustrated",
+            "color_code": "intense-red",
+            "gradient": ["#D32F2F", "#C62828", "#B71C1C"],
+            "why": "Red appears during emotional overheating — anger, pressure, irritation.",
+            "what_it_does": "Alerts user of emotional overload, reveals internal conflict, increases self-awareness of triggers",
+            "purpose": "Encourage cooling/grounding practices, prevent emotional outburst, reduce internal tension",
+            "chakra": "Root",
+            "element": "Fire",
+            "triggers": ["anger", "angry", "frustrated", "irritated", "furious", "mad", "rage"]
         },
-        "white": {
-            "hex": "#F5F5F5",
-            "name": "white",
-            "keywords": ["space", "clarity", "reset"],
-            "supports": ["overload", "cluttered_mind"],
-            "avoid_when": [],
-            "chakra": "all",
-            "element": "Light"
+        "peaceful_content": {
+            "name": "Peaceful & Content",
+            "color_code": "white",
+            "gradient": ["#FFFFFF", "#F5F5F5", "#EEEEEE"],
+            "why": "White symbolizes clarity, harmony, and completion — unity of all colors.",
+            "what_it_does": "Brings emotional stillness, supports acceptance, enhances spiritual balance",
+            "purpose": "Reinforce positivity, support restful mental states, maintain inner alignment",
+            "chakra": "Crown",
+            "element": "Ether",
+            "triggers": ["peaceful", "content", "satisfied", "harmonious", "tranquil"]
         },
-        "grey": {
-            "hex": "#9E9E9E",
-            "name": "grey",
-            "keywords": ["neutral", "balance", "stillness"],
-            "supports": ["no_data", "baseline"],
-            "avoid_when": [],
-            "chakra": "all",
-            "element": "Earth"
+        "confused_uncertain": {
+            "name": "Confused & Uncertain",
+            "color_code": "grey-yellow",
+            "gradient": ["#9E9E9E", "#BDBDBD", "#E0E0E0"],
+            "why": "Grey symbolizes fog or lack of direction; pale yellow represents searching for clarity.",
+            "what_it_does": "Exposes mental instability, encourages grounding, highlights need for clarity",
+            "purpose": "Guide user to structured thinking, reduce uncertainty, promote mindful decision-making",
+            "chakra": "Solar Plexus",
+            "element": "Air",
+            "triggers": ["confused", "uncertain", "doubtful", "unsure", "puzzled", "perplexed"]
         },
-        "indigo": {
-            "hex": "#1A237E",
-            "name": "indigo",
-            "keywords": ["depth", "protection", "containment"],
-            "supports": ["heavy_emotions", "deep_reflection"],
-            "avoid_when": ["severe_depression"],
-            "chakra": "third_eye",
-            "element": "Light"
+        "motivated_driven": {
+            "name": "Motivated & Driven",
+            "color_code": "gold",
+            "gradient": ["#FFD700", "#FFC107", "#FFB300"],
+            "why": "Gold denotes ambition, purpose, and transformational energy.",
+            "what_it_does": "Boosts confidence, reinforces goal-oriented mindset, activates personal power",
+            "purpose": "Support progress, encourage disciplined action, strengthen inner strength",
+            "chakra": "Solar Plexus",
+            "element": "Fire",
+            "triggers": ["motivated", "driven", "determined", "ambitious", "purposeful"]
+        },
+        "overwhelmed": {
+            "name": "Overwhelmed",
+            "color_code": "dark-grey",
+            "gradient": ["#616161", "#424242", "#212121"],
+            "why": "Dark grey represents emotional overload and system saturation.",
+            "what_it_does": "Signals cognitive burden, indicates emotional exhaustion, draws attention to stressors",
+            "purpose": "Encourage step-back and rest, prevent burnout, re-establish emotional boundaries",
+            "chakra": "Root",
+            "element": "Earth",
+            "triggers": ["overwhelmed", "overloaded", "stressed-out", "swamped", "burdened"]
+        },
+        "creative_inspired": {
+            "name": "Creative & Inspired",
+            "color_code": "orange",
+            "gradient": ["#FF9800", "#FB8C00", "#F57C00"],
+            "why": "Orange is the color of the sacral chakra — creativity, expression, imagination.",
+            "what_it_does": "Stimulates inspiration, encourages expressive thinking, enhances artistic flow",
+            "purpose": "Support creative output, improve ideation, strengthen expressive confidence",
+            "chakra": "Sacral",
+            "element": "Water + Fire",
+            "triggers": ["creative", "inspired", "imaginative", "artistic", "inventive"]
+        },
+        "restless_agitated": {
+            "name": "Restless & Agitated",
+            "color_code": "orange-red",
+            "gradient": ["#FF5722", "#F4511E", "#E64A19"],
+            "why": "Orange-red indicates hyperactive energy and internal agitation.",
+            "what_it_does": "Reveals disrupted emotional balance, increases awareness of impulsivity, highlights nervous restlessness",
+            "purpose": "Encourage grounding, reduce scattered energy, support calm breathing practices",
+            "chakra": "Root + Sacral",
+            "element": "Fire + Air",
+            "triggers": ["restless", "agitated", "fidgety", "uneasy", "jumpy", "hyperactive"]
+        },
+        "grateful_thankful": {
+            "name": "Grateful & Thankful",
+            "color_code": "pink",
+            "gradient": ["#EC407A", "#E91E63", "#D81B60"],
+            "why": "Pink symbolizes compassion, emotional warmth, and heart expansion.",
+            "what_it_does": "Encourages kindness, promotes self-love, strengthens emotional bonding",
+            "purpose": "Enhance empathy, support loving relationships, promote positivity and gratitude",
+            "chakra": "Heart",
+            "element": "Air",
+            "triggers": ["grateful", "thankful", "appreciative", "blessed", "gratitude"]
+        },
+        "neutral": {
+            "name": "Neutral State",
+            "color_code": "grey",
+            "gradient": ["#9E9E9E", "#BDBDBD", "#E0E0E0"],
+            "why": "Grey represents neutrality, pause, or absence of emotional signal.",
+            "what_it_does": "Creates emotional reset, avoids false interpretation, encourages user to interact/log mood",
+            "purpose": "Hold neutral space, indicate the need for fresh emotional input, provide visual baseline",
+            "chakra": "All (balanced)",
+            "element": "Earth",
+            "triggers": ["neutral", "okay", "fine", "average", "normal"]
         }
     }
     
-    # Emotion to Color Mapping (based on therapeutic principles)
-    EMOTION_TO_COLOR = {
-        "joy": "orange",
-        "happiness": "yellow",
-        "love": "pink",
-        "excitement": "orange",
-        "calm": "teal",
-        "sadness": "blue",
-        "anger": "red",
-        "fear": "indigo",
-        "anxiety": "violet",
-        "disgust": "green",
-        "surprise": "orange",
-        "neutral": "grey"
-    }
-    
-    AURA_TYPES = {
-        "calm": ["calm", "peace", "relaxed"],
-        "energetic": ["joy", "excitement", "happiness"],
-        "turbulent": ["anger", "anxiety", "fear"],
-        "melancholic": ["sadness", "grief"],
-        "balanced": ["neutral", "contentment"]
+    # Map basic emotions to aura states
+    EMOTION_TO_AURA = {
+        # Calm states
+        "calm": "balanced_calm",
+        "peace": "balanced_calm",
+        "relaxed": "balanced_calm",
+        "balanced": "balanced_calm",
+        "serene": "balanced_calm",
+        
+        # Happy/Joyful states
+        "joy": "joyful_happy",
+        "happy": "joyful_happy",
+        "happiness": "joyful_happy",
+        "cheerful": "joyful_happy",
+        "delighted": "joyful_happy",
+        
+        # Sad states
+        "sadness": "sad_low",
+        "sad": "sad_low",
+        "down": "sad_low",
+        "low": "sad_low",
+        "melancholy": "sad_low",
+        
+        # Angry/Frustrated states
+        "anger": "angry_frustrated",
+        "angry": "angry_frustrated",
+        "frustrated": "angry_frustrated",
+        "irritated": "angry_frustrated",
+        
+        # Anxious/Stressed states
+        "fear": "stressed_anxious",
+        "anxiety": "stressed_anxious",
+        "anxious": "stressed_anxious",
+        "worried": "stressed_anxious",
+        "stress": "stressed_anxious",
+        
+        # Tired/Low energy states
+        "tired": "tired_drained",
+        "exhausted": "tired_drained",
+        "drained": "tired_drained",
+        "fatigued": "tired_drained",
+        "weary": "tired_drained",
+        "low-energy": "tired_drained",
+        
+        # Energized states
+        "energized": "energized_active",
+        "energetic": "energized_active",
+        "active": "energized_active",
+        "motivated": "energized_active",
+        
+        # Grateful states
+        "grateful": "grateful_thankful",
+        "thankful": "grateful_thankful",
+        "appreciative": "grateful_thankful",
+        
+        # Confused states
+        "confused": "confused_uncertain",
+        "uncertain": "confused_uncertain",
+        "doubtful": "confused_uncertain",
+        
+        # Neutral
+        "neutral": "neutral"
     }
     
     def __init__(self, supabase_client):
