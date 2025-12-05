@@ -5,6 +5,8 @@ import { ChatbotPage } from './components/ChatbotPage';
 import { ConversationHistoryPage } from './components/ConversationHistoryPage';
 import { LogPage } from './components/LogPage';
 import { YogaLifestylePage } from './components/YogaLifestylePage';
+import { YogaRecommendationPage } from './components/YogaRecommendationPage';
+import { AyurvedaRecommendationPage } from './components/AyurvedaRecommendationPage';
 import { DietMoodPage } from './components/DietMoodPage';
 import { ProgressAnalyticsPage } from './components/ProgressAnalyticsPage';
 import { EmotionHistoryPage } from './components/EmotionHistoryPage';
@@ -18,11 +20,12 @@ import { NotificationCenter } from './components/NotificationCenter';
 import { ProfilePage } from './components/ProfilePage';
 import { AccountSettingsPage } from './components/AccountSettingsPage';
 import { DailyRoutinesPage } from './components/DailyRoutinesPage';
+import { DinacharyaPage } from './components/DinacharyaPage';
 import { Toaster } from './components/ui/sonner';
 import { useAuth } from './contexts/AuthContext';
 import api from './services/api';
 
-export type PageType = 'landing' | 'signin' | 'signup' | 'dashboard' | 'chatbot' | 'conversation-history' | 'manual' | 'moodboard' | 'yoga' | 'diet' | 'progress' | 'emotion-history' | 'aura' | 'device' | 'dosha' | 'profile' | 'settings' | 'routines';
+export type PageType = 'landing' | 'signin' | 'signup' | 'dashboard' | 'chatbot' | 'conversation-history' | 'manual' | 'moodboard' | 'yoga' | 'yoga-recommendations' | 'ayurveda-recommendations' | 'diet' | 'progress' | 'emotion-history' | 'aura' | 'device' | 'dosha' | 'profile' | 'settings' | 'routines' | 'dinacharya';
 
 function App() {
   const { user, isAuthenticated, isLoading, logout } = useAuth();
@@ -230,6 +233,8 @@ function App() {
       {currentPage === 'manual' && <LogPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
       {currentPage === 'moodboard' && <LogPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
       {currentPage === 'yoga' && <YogaLifestylePage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
+      {currentPage === 'yoga-recommendations' && <YogaRecommendationPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
+      {currentPage === 'ayurveda-recommendations' && <AyurvedaRecommendationPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
       {currentPage === 'diet' && <DietMoodPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
       {currentPage === 'progress' && <ProgressAnalyticsPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
       {currentPage === 'emotion-history' && <EmotionHistoryPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
@@ -237,6 +242,7 @@ function App() {
       {currentPage === 'device' && <DevicePage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
       {currentPage === 'dosha' && <DoshaQuizPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
       {currentPage === 'routines' && <DailyRoutinesPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
+      {currentPage === 'dinacharya' && <DinacharyaPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
       {currentPage === 'profile' && <ProfilePage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
       {currentPage === 'settings' && <AccountSettingsPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
 

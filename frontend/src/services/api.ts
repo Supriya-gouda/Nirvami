@@ -38,6 +38,10 @@ import type {
   CreateAlertRequest,
   SystemStats,
   AyurvedaResource,
+  Recommendation,
+  DailyRecommendationsResponse,
+  RecommendationsBySource,
+  RecommendationCategory
 } from '../types/api.types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
@@ -95,19 +99,30 @@ class ApiService {
   private saveAuth(token: string) {
     this.accessToken = token;
     localStorage.setItem('nirvami_auth_token', token);
+    localStorage.setItem('token', token); // Also save as 'token' for compatibility
+    console.log('💾 Auth token saved:', token.substring(0, 30) + '...');
   }
 
   private loadAuth() {
-    const token = localStorage.getItem('nirvami_auth_token');
+    // Check multiple possible token keys
+    const token = localStorage.getItem('nirvami_auth_token') || 
+                  localStorage.getItem('token') || 
+                  localStorage.getItem('access_token');
     if (token) {
       this.accessToken = token;
+      console.log('🔐 Auth token loaded:', token.substring(0, 30) + '...');
+    } else {
+      console.warn('⚠️ No auth token found in localStorage');
     }
   }
 
   private clearAuth() {
     this.accessToken = null;
     localStorage.removeItem('nirvami_auth_token');
+    localStorage.removeItem('token');
+    localStorage.removeItem('access_token');
     localStorage.removeItem('nirvami_user');
+    console.log('🗑️ Auth tokens cleared');
   }
 
   isAuthenticated(): boolean {
@@ -434,9 +449,8 @@ class ApiService {
         .from('aura_entries')
         .select('*')
         .eq('user_id', sessionData.session.user.id)
-        .gte('generated_at', `${today}T00:00:00Z`)
-        .lte('generated_at', `${today}T23:59:59Z`)
-        .order('generated_at', { ascending: false })
+        .eq('date', today)
+        .order('created_at', { ascending: false })
         .limit(1)
         .single();
 
@@ -467,13 +481,13 @@ class ApiService {
         .from('aura_entries')
         .select('*')
         .eq('user_id', sessionData.session.user.id)
-        .order('generated_at', { ascending: false });
+        .order('created_at', { ascending: false });
 
-      if (params?.start_date) {
-        query = query.gte('generated_at', params.start_date);
+      if (params.start_date) {
+        query = query.gte('date', params.start_date);
       }
-      if (params?.end_date) {
-        query = query.lte('generated_at', params.end_date);
+      if (params.end_date) {
+        query = query.lte('date', params.end_date);
       }
 
       const { data, error } = await query;
@@ -852,12 +866,65 @@ class ApiService {
     activity: string;
     notes?: string;
   }): Promise<any> {
-    const response = await this.api.post('/routines/entry', data);
+    // Format data to match backend schema expectations
+    const formattedData = {
+      date: data.date, // YYYY-MM-DD format
+      time: data.time, // HH:MM format
+      activity: data.activity,
+      notes: data.notes || null
+    };
+    const response = await this.api.post('/routines/entry', formattedData);
     return response.data;
   }
 
   async deleteRoutine(entryId: string): Promise<any> {
     const response = await this.api.delete(`/routines/entry/${entryId}`);
+    return response.data;
+  }
+
+  async getRoutineEntries(startDate?: string, endDate?: string, days: number = 7): Promise<any[]> {
+    const params: any = { days };
+    if (startDate) params.start_date = startDate;
+    if (endDate) params.end_date = endDate;
+    const response = await this.api.get('/routines/entries', { params });
+    return response.data;
+  }
+
+  // ==================== Dinacharya Methods ====================
+
+  async getDinacharyaToday(): Promise<any> {
+    const response = await this.api.get('/dinacharya/today');
+    return response.data;
+  }
+
+  async saveDinacharya(data: {
+    log_date?: string;
+    routines?: Array<{
+      time: string;
+      activity: string;
+      notes?: string;
+    }>;
+    stress_level?: number;
+    energy_level?: number;
+    sleep_quality?: number;
+    sleep_hours?: number;
+    notes?: string;
+  }): Promise<any> {
+    const response = await this.api.post('/dinacharya/log', data);
+    return response.data;
+  }
+
+  async getDinacharyaHistory(days: number = 7): Promise<any> {
+    const response = await this.api.get('/dinacharya/history', {
+      params: { days }
+    });
+    return response.data;
+  }
+
+  async analyzeDinacharya(analysisDate?: string): Promise<any> {
+    const response = await this.api.post('/dinacharya/analyze', {
+      target_date: analysisDate
+    });
     return response.data;
   }
 
@@ -902,6 +969,51 @@ class ApiService {
 
   async markNotificationRead(notificationId: string): Promise<any> {
     const response = await this.api.put(`/alerts/notifications/${notificationId}/read`);
+    return response.data;
+  }
+
+  // ==================== Recommendations Methods ====================
+
+  async getYogaRecommendations(date?: string): Promise<Recommendation[]> {
+    console.log('🧘 Fetching yoga recommendations with auth:', !!this.accessToken);
+    const params = date ? { date } : {};
+    const response = await this.api.get('/recommendations/yoga', { params });
+    console.log('🧘 Yoga recommendations received:', response.data.length, 'items');
+    return response.data;
+  }
+
+  async getAyurvedaRecommendations(date?: string): Promise<Recommendation[]> {
+    console.log('🌿 Fetching ayurveda recommendations with auth:', !!this.accessToken);
+    const params = date ? { date } : {};
+    const response = await this.api.get('/recommendations/ayurveda', { params });
+    console.log('🌿 Ayurveda recommendations received:', response.data.length, 'items');
+    return response.data;
+  }
+
+  async getLifestyleRecommendations(date?: string): Promise<Recommendation[]> {
+    const params = date ? { date } : {};
+    const response = await this.api.get('/recommendations/lifestyle', { params });
+    return response.data;
+  }
+
+  async getRecommendationsByCategory(category: RecommendationCategory, date?: string): Promise<Recommendation[]> {
+    const params = date ? { date } : {};
+    const response = await this.api.get(`/recommendations/by-category/${category}`, { params });
+    return response.data;
+  }
+
+  async getAllDailyRecommendations(date?: string): Promise<DailyRecommendationsResponse> {
+    const params = date ? { date } : {};
+    const response = await this.api.get('/recommendations/all', { params });
+    return response.data;
+  }
+
+  async getRecommendationsGroupedBySource(category?: RecommendationCategory, date?: string): Promise<RecommendationsBySource> {
+    const params: any = {};
+    if (date) params.date = date;
+    if (category) params.category = category;
+    
+    const response = await this.api.get('/recommendations/grouped-by-source', { params });
     return response.data;
   }
 }

@@ -349,6 +349,22 @@ async def send_message(
         try:
             ai_result = supabase.table("messages").insert(ai_message_data).execute()
             logger.info(f"[CHAT] ✅ AI response saved: {ai_message_id}")
+            
+            # Extract and store recommendations from AI response using Gemini
+            try:
+                from app.services.recommendation_service import recommendation_service
+                extracted_recs = await recommendation_service.extract_and_store_recommendations_from_chat(
+                    user_id=current_user_id,
+                    message_text=ai_response,
+                    timestamp=datetime.utcnow()
+                )
+                if extracted_recs:
+                    logger.info(f"[CHAT] ✅ Extracted and stored {len(extracted_recs)} recommendations")
+                else:
+                    logger.info(f"[CHAT] ℹ️ No recommendations found in AI response")
+            except Exception as rec_err:
+                logger.warning(f"[CHAT] Failed to extract recommendations (non-critical): {rec_err}")
+                
         except Exception as db_ai_err:
             logger.error(f"Failed to save AI response to DB: {db_ai_err}", exc_info=True)
         

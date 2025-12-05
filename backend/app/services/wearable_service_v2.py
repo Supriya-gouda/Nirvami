@@ -279,6 +279,43 @@ class WearableService:
             # Deduplicate recommendations
             recommendations = list(dict.fromkeys(recommendations))
             
+            # Store device recommendations in the unified recommendation system
+            try:
+                if recommendations:
+                    from datetime import date
+                    import asyncio
+                    import threading
+                    
+                    # Convert to date object for storage
+                    target_date = date.fromisoformat(latest.get("date", date.today().isoformat()))
+                    
+                    logger.info(f"[DEVICE_RECS] Attempting to store {len(recommendations[:10])} device recommendations for {target_date}")
+                    
+                    # Store recommendations synchronously using threading to avoid async issues
+                    def store_device_recs():
+                        try:
+                            from app.services.recommendation_service import recommendation_service
+                            loop = asyncio.new_event_loop()
+                            asyncio.set_event_loop(loop)
+                            result = loop.run_until_complete(
+                                recommendation_service.save_device_recommendations(
+                                    user_id=user_id,
+                                    target_date=target_date,
+                                    device_recs=recommendations[:10]  # Top 10
+                                )
+                            )
+                            loop.close()
+                            logger.info(f"[DEVICE_RECS] ✅ Successfully stored {len(result)} device recommendations for user {user_id}")
+                        except Exception as e:
+                            logger.error(f"[DEVICE_RECS] ❌ Failed to store device recommendations: {e}", exc_info=True)
+                    
+                    # Run in a separate thread to avoid blocking
+                    thread = threading.Thread(target=store_device_recs, daemon=True)
+                    thread.start()
+                        
+            except Exception as rec_store_err:
+                logger.warning(f"Non-critical error storing device recommendations: {rec_store_err}")
+            
             return {
                 "has_risks": len(risks) > 0,
                 "risk_level": risk_level,

@@ -24,7 +24,9 @@ from app.api.routes import (
     yoga,
     routines,
     journal,
-    goals
+    goals,
+    dinacharya,
+    recommendations  # New unified recommendation routes
 )
 from app.api.routes import wearable_v2  # New simplified wearable routes
 from app.ml.model_manager import ModelManager
@@ -134,8 +136,10 @@ app.include_router(journal.router, prefix=f"/api/{settings.API_VERSION}/journal"
 app.include_router(goals.router, prefix=f"/api/{settings.API_VERSION}/goals", tags=["Goals"])
 app.include_router(dosha.router, prefix=f"/api/{settings.API_VERSION}/dosha", tags=["Dosha"])
 app.include_router(yoga.router, prefix=f"/api/{settings.API_VERSION}/yoga", tags=["Yoga & Sound Therapy"])
+app.include_router(recommendations.router, prefix=f"/api/{settings.API_VERSION}/recommendations", tags=["Recommendations"])  # New unified recommendations
 app.include_router(meals.router, prefix=f"/api/{settings.API_VERSION}/meals", tags=["Meals"])
 app.include_router(routines.router, prefix=f"/api/{settings.API_VERSION}/routines", tags=["Daily Routines"])
+app.include_router(dinacharya.router, prefix=f"/api/{settings.API_VERSION}", tags=["Dinacharya"])
 app.include_router(wearable.router, prefix=f"/api/{settings.API_VERSION}/wearable", tags=["Wearable"])
 app.include_router(wearable_v2.router, prefix=f"/api/{settings.API_VERSION}/wearable-v2", tags=["Wearable V2"])  # New clean routes
 app.include_router(watch.router, prefix=f"/api/{settings.API_VERSION}/watch", tags=["Watch"])

@@ -1,10 +1,10 @@
 """Daily routine tracking routes."""
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Body
 from app.utils.auth import get_current_user_id
 from app.utils.database import get_supabase
 from pydantic import BaseModel
 from datetime import date, time, datetime
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import logging
 import uuid
 
@@ -14,8 +14,8 @@ router = APIRouter()
 
 
 class RoutineEntryRequest(BaseModel):
-    date: date
-    time: time
+    date: str  # Changed to string to accept "YYYY-MM-DD"
+    time: str  # Changed to string to accept "HH:MM"
     activity: str
     notes: Optional[str] = None
 
@@ -36,30 +36,43 @@ async def add_routine_entry(
     current_user_id: str = Depends(get_current_user_id)
 ):
     """Add a daily routine entry."""
-    supabase = get_supabase()
+    supabase = get_supabase(use_service_role=True)  # Use service role to bypass RLS
     
     try:
+        logger.info(f"[ROUTINE] ===== NEW REQUEST =====")
+        logger.info(f"[ROUTINE] User ID: {current_user_id}")
+        logger.info(f"[ROUTINE] Date: {req.date} (type: {type(req.date)})")
+        logger.info(f"[ROUTINE] Time: {req.time} (type: {type(req.time)})")
+        logger.info(f"[ROUTINE] Activity: {req.activity}")
+        logger.info(f"[ROUTINE] Notes: {req.notes}")
+        
+        # Prepare entry data - strings are fine for Supabase
         entry_data = {
-            "id": str(uuid.uuid4()),
             "user_id": current_user_id,
-            "date": req.date.isoformat(),
-            "time": req.time.isoformat(),
+            "date": req.date,  # Already a string in YYYY-MM-DD format
+            "time": req.time,  # Already a string in HH:MM format
             "activity": req.activity,
-            "notes": req.notes,
-            "created_at": datetime.utcnow().isoformat()
+            "notes": req.notes
         }
         
-        logger.info(f"[ROUTINE] user={current_user_id}, activity={req.activity}, date={req.date}")
+        logger.info(f"[ROUTINE] Inserting data: {entry_data}")
         result = supabase.table("daily_routines").insert(entry_data).execute()
         
-        if result.data:
-            logger.info(f"✅ Routine entry saved for user {current_user_id}")
+        logger.info(f"[ROUTINE] Supabase response: {result}")
+        logger.info(f"[ROUTINE] Supabase data: {result.data}")
+        
+        if result.data and len(result.data) > 0:
+            logger.info(f"✅ [ROUTINE] SUCCESS! Entry ID: {result.data[0].get('id')}")
             return result.data[0]
         else:
-            raise HTTPException(status_code=500, detail="Failed to save routine entry")
+            logger.error(f"❌ [ROUTINE] No data returned from Supabase")
+            logger.error(f"[ROUTINE] Full result: {result}")
+            raise HTTPException(status_code=500, detail="Failed to save routine entry - no data returned")
             
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"❌ Error saving routine entry: {e}", exc_info=True)
+        logger.error(f"❌ [ROUTINE] EXCEPTION: {type(e).__name__}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to save routine entry: {str(e)}")
 
 
@@ -71,7 +84,7 @@ async def get_routine_entries(
     days: int = 7
 ):
     """Get routine entries for user."""
-    supabase = get_supabase()
+    supabase = get_supabase(use_service_role=True)  # Use service role to bypass RLS
     
     try:
         # Use start_date if provided, otherwise calculate from days
@@ -105,7 +118,7 @@ async def delete_routine_entry(
     current_user_id: str = Depends(get_current_user_id)
 ):
     """Delete a routine entry."""
-    supabase = get_supabase()
+    supabase = get_supabase(use_service_role=True)  # Use service role to bypass RLS
     
     try:
         result = supabase.table("daily_routines").delete().eq(

@@ -390,3 +390,64 @@ class Notification(BaseModel):
     read: bool = False
     action_url: Optional[str] = None
     created_at: datetime
+
+
+# ============================================
+# RECOMMENDATIONS
+# ============================================
+
+class RecommendationSource(str, Enum):
+    CHAT = "chat"
+    DEVICE = "device" 
+    SYSTEM = "system"
+
+
+class RecommendationCategory(str, Enum):
+    YOGA = "yoga"
+    AYURVEDA = "ayurveda"
+    LIFESTYLE = "lifestyle"
+    SLEEP = "sleep"
+    BREATHING = "breathing"
+    MEDITATION = "meditation"
+    DIET = "diet"
+
+
+class RecommendationBase(BaseModel):
+    """Base recommendation model"""
+    user_id: str
+    date: date
+    source: RecommendationSource
+    category: RecommendationCategory
+    title: str
+    content: str
+    meta: Dict[str, Any] = {}
+
+
+class RecommendationCreate(RecommendationBase):
+    """Request model for creating recommendations"""
+    pass
+
+
+class Recommendation(RecommendationBase):
+    """Full recommendation model with ID and timestamps"""
+    id: str
+    created_at: datetime
+
+
+class DailyRecommendationsResponse(BaseModel):
+    """Response model for daily recommendations by category"""
+    date: date
+    yoga: List[Recommendation] = []
+    ayurveda: List[Recommendation] = []
+    lifestyle: List[Recommendation] = []
+    sleep: List[Recommendation] = []
+    breathing: List[Recommendation] = []
+    meditation: List[Recommendation] = []
+    diet: List[Recommendation] = []
+
+
+class RecommendationsBySource(BaseModel):
+    """Recommendations grouped by source"""
+    chat: List[Recommendation] = []
+    device: List[Recommendation] = []
+    system: List[Recommendation] = []

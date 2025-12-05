@@ -392,3 +392,49 @@ export interface AyurvedaResource {
   tags?: string[];
   created_at: string;
 }
+
+// Recommendation Types
+export enum RecommendationSource {
+  CHAT = 'chat',
+  DEVICE = 'device',
+  SYSTEM = 'system'
+}
+
+export enum RecommendationCategory {
+  YOGA = 'yoga',
+  AYURVEDA = 'ayurveda',
+  LIFESTYLE = 'lifestyle',
+  SLEEP = 'sleep',
+  BREATHING = 'breathing',
+  MEDITATION = 'meditation',
+  DIET = 'diet'
+}
+
+export interface Recommendation {
+  id: string;
+  user_id: string;
+  date: string; // ISO date string
+  source: RecommendationSource;
+  category: RecommendationCategory;
+  title: string;
+  content: string;
+  created_at: string; // ISO datetime string
+  meta?: Record<string, any>;
+}
+
+export interface DailyRecommendationsResponse {
+  date: string; // ISO date string
+  yoga: Recommendation[];
+  ayurveda: Recommendation[];
+  lifestyle: Recommendation[];
+  sleep: Recommendation[];
+  breathing: Recommendation[];
+  meditation: Recommendation[];
+  diet: Recommendation[];
+}
+
+export interface RecommendationsBySource {
+  chat: Recommendation[];
+  device: Recommendation[];
+  system: Recommendation[];
+}

@@ -196,3 +196,53 @@ def get_chatbot() -> GeminiChatbot:
     if _chatbot_instance is None:
         _chatbot_instance = GeminiChatbot()
     return _chatbot_instance
+
+
+async def get_gemini_response(prompt: str, system_instruction: Optional[str] = None, temperature: float = 0.7) -> str:
+    """
+    Get a response from Gemini AI for any prompt.
+    Used for schedule analysis and other AI-powered features.
+    
+    Args:
+        prompt: The user prompt/question
+        system_instruction: Optional system instruction to guide the AI's behavior
+        temperature: Controls randomness (0.0-1.0, default 0.7)
+        
+    Returns:
+        AI-generated response text
+    """
+    try:
+        if not settings.GEMINI_API_KEY or settings.GEMINI_API_KEY == "your-gemini-api-key-here":
+            logger.warning("⚠️  GEMINI_API_KEY not configured")
+            return "Error: Gemini API key not configured"
+        
+        # Configure Gemini
+        genai.configure(api_key=settings.GEMINI_API_KEY)
+        
+        # Use Gemini Flash 2.0 for fast, efficient responses
+        model = genai.GenerativeModel(
+            model_name="gemini-2.0-flash-exp",
+            system_instruction=system_instruction,
+            generation_config={
+                "temperature": temperature,
+                "top_p": 0.95,
+                "top_k": 40,
+                "max_output_tokens": 8192,
+            }
+        )
+        
+        logger.info(f"[GEMINI] Sending prompt (length: {len(prompt)} chars)")
+        
+        # Generate response
+        response = model.generate_content(prompt)
+        
+        if response and response.text:
+            logger.info(f"[GEMINI] Received response (length: {len(response.text)} chars)")
+            return response.text.strip()
+        else:
+            logger.warning("Gemini returned empty response")
+            return "I apologize, but I'm having trouble generating a response right now. Please try again."
+            
+    except Exception as e:
+        logger.error(f"Error getting Gemini response: {e}", exc_info=True)
+        return f"I encountered an error while processing your request. Please try again later."

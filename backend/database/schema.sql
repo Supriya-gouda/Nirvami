@@ -648,6 +648,30 @@ CREATE TRIGGER create_user_preferences_on_signup
     EXECUTE FUNCTION create_default_preferences();
 
 -- ============================================
+-- 15. UNIFIED RECOMMENDATION SYSTEM
+-- ============================================
+
+-- Unified recommendations from chat AI and device analysis
+CREATE TABLE IF NOT EXISTS recommendations (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+    date DATE NOT NULL,
+    source TEXT NOT NULL CHECK (source IN ('chat', 'device', 'system')),
+    category TEXT NOT NULL CHECK (category IN ('yoga', 'ayurveda', 'lifestyle', 'sleep', 'breathing', 'meditation', 'diet')),
+    title TEXT NOT NULL,
+    content TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    meta JSONB DEFAULT '{}'::jsonb
+);
+
+CREATE INDEX idx_recommendations_user_date ON recommendations(user_id, date DESC);
+CREATE INDEX idx_recommendations_category ON recommendations(category);
+CREATE INDEX idx_recommendations_source ON recommendations(source);
+
+-- Unique constraint to prevent exact duplicates per user/date/category
+CREATE UNIQUE INDEX idx_recommendations_dedup ON recommendations(user_id, date, category, md5(content));
+
+-- ============================================
 -- COMMENTS
 -- ============================================
 
@@ -662,3 +686,4 @@ COMMENT ON TABLE yoga_poses IS 'Ayurvedic yoga poses personalized by dosha and e
 COMMENT ON TABLE sound_tracks IS 'Sound therapy tracks with healing frequencies';
 COMMENT ON TABLE meals IS 'Meal tracking with Ayurvedic dosha impact analysis';
 COMMENT ON TABLE user_streaks IS 'Daily login streak tracking for user engagement';
+COMMENT ON TABLE recommendations IS 'Unified daily recommendations from AI chat and device analysis';

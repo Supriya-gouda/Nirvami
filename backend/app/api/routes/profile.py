@@ -344,7 +344,8 @@ async def get_current_streak(
                     }
                 }
             }
-            create_result = supabase.table("user_preferences").insert(default_prefs).execute()
+            create_result = supabase_admin = get_supabase(use_service_role=True)
+            create_result = supabase_admin.table("user_preferences").insert(default_prefs).execute()
             prefs = create_result.data[0] if create_result.data else default_prefs
         else:
             prefs = result.data[0]
@@ -390,7 +391,8 @@ async def record_visit(
                     }
                 }
             }
-            supabase.table("user_preferences").insert(prefs).execute()
+            supabase_admin = get_supabase(use_service_role=True)
+            supabase_admin.table("user_preferences").insert(prefs).execute()
             return prefs["preferences"]["streak_data"]
         
         prefs = result.data[0]

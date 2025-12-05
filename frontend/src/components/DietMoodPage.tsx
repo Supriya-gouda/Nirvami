@@ -26,6 +26,15 @@ export function DietMoodPage({ user, onNavigate, onLogout, onOpenNotifications }
   const [mealHistory, setMealHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // Meal logging state
+  const [newMealType, setNewMealType] = useState<'breakfast' | 'lunch' | 'dinner' | 'snack'>('breakfast');
+  const [newMealTime, setNewMealTime] = useState('');
+  const [newMealFoods, setNewMealFoods] = useState('');
+  const [newMealNotes, setNewMealNotes] = useState('');
+  const [savingMeal, setSavingMeal] = useState(false);
+  const [mealSuccess, setMealSuccess] = useState<string | null>(null);
+  const [mealError, setMealError] = useState<string | null>(null);
+
   // Fetch meal-mood correlation and meal history from backend
   useEffect(() => {
     const loadData = async () => {
@@ -51,6 +60,49 @@ export function DietMoodPage({ user, onNavigate, onLogout, onOpenNotifications }
 
     loadData();
   }, []);
+
+  const handleAddMeal = async () => {
+    if (!newMealFoods.trim()) {
+      setMealError('Please enter foods eaten');
+      return;
+    }
+
+    try {
+      setSavingMeal(true);
+      setMealError(null);
+
+      await api.logMeal({
+        foods: newMealFoods.split(',').map(f => f.trim()),
+        meal_type: newMealType,
+        portion_sizes: {},
+        calories: 0
+      });
+
+      setMealSuccess('Meal logged successfully!');
+      
+      // Refresh meal history
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 7);
+      const historyData = await api.getMealHistory({ 
+        start_date: startDate.toISOString().split('T')[0], 
+        end_date: endDate.toISOString().split('T')[0] 
+      });
+      setMealHistory(historyData || []);
+
+      // Reset form
+      setNewMealFoods('');
+      setNewMealNotes('');
+      setNewMealTime('');
+      
+      setTimeout(() => setMealSuccess(null), 3000);
+    } catch (err) {
+      console.error('Failed to log meal:', err);
+      setMealError('Failed to log meal. Please try again.');
+    } finally {
+      setSavingMeal(false);
+    }
+  };
 
   // Map backend data to chart format, with fallback
   const correlationData = mealHistory.length > 0
@@ -197,6 +249,90 @@ export function DietMoodPage({ user, onNavigate, onLogout, onOpenNotifications }
         >
           <h1 className="mb-2">Diet & Mood Sync</h1>
           <p className="text-gray-600">Understand how your food affects your emotions</p>
+        </motion.div>
+
+        {/* Meal Logging Section */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
+          className="mb-6"
+        >
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <UtensilsCrossed className="w-5 h-5 text-purple-600" />
+                Log Your Meals
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {mealSuccess && (
+                <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-800 text-sm">
+                  {mealSuccess}
+                </div>
+              )}
+              {mealError && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
+                  {mealError}
+                </div>
+              )}
+              <div className="grid md:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Meal Type</label>
+                  <select
+                    value={newMealType}
+                    onChange={(e) => setNewMealType(e.target.value as any)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                    aria-label="Meal type"
+                  >
+                    <option value="breakfast">Breakfast</option>
+                    <option value="lunch">Lunch</option>
+                    <option value="dinner">Dinner</option>
+                    <option value="snack">Snack</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Time (optional)</label>
+                  <input
+                    type="time"
+                    value={newMealTime}
+                    onChange={(e) => setNewMealTime(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                    aria-label="Meal time"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Foods Eaten</label>
+                  <input
+                    type="text"
+                    value={newMealFoods}
+                    onChange={(e) => setNewMealFoods(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                    placeholder="e.g., Rice, Dal, Salad"
+                  />
+                </div>
+              </div>
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Notes (optional)</label>
+                <textarea
+                  value={newMealNotes}
+                  onChange={(e) => setNewMealNotes(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                  placeholder="How did you feel after eating?"
+                  rows={2}
+                />
+              </div>
+              <div className="mt-4">
+                <Button
+                  onClick={handleAddMeal}
+                  disabled={savingMeal}
+                  className="w-full md:w-auto bg-purple-600 hover:bg-purple-700"
+                >
+                  {savingMeal ? 'Logging...' : 'Log Meal'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </motion.div>
 
         {/* Mood Correlation Chart */}
