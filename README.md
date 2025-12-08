@@ -1,10 +1,71 @@
 # Nirvami - AI-Powered Mental Wellness Platform
 
-**Nirvami** is an intelligent mental health companion that bridges ancient Ayurvedic wisdom with modern AI technology to provide personalized mental wellness support. The platform combines emotion detection, dosha-based recommendations, wellness tracking, and holistic health analytics.
+[![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![React](https://img.shields.io/badge/React-18-61DAFB.svg)](https://reactjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-3178C6.svg)](https://www.typescriptlang.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.104-009688.svg)](https://fastapi.tiangolo.com/)
+[![License](https://img.shields.io/badge/License-Proprietary-red.svg)](LICENSE)
+
+**Nirvami** is an intelligent mental health companion that bridges ancient Ayurvedic wisdom with modern AI technology to provide personalized mental wellness support. The platform combines emotion detection, dosha-based recommendations, wellness tracking, holistic health analytics, AI chatbot with automatic recommendation extraction, and SMS notifications for health alerts.
+
+**Last Updated**: December 8, 2024
+
+---
+
+## 📸 Platform Preview
+
+### Home Page
+![Nirvami Home Page](HomePage.png)
+*Welcome to Nirvami - Your journey to mental wellness begins here*
+
+### Dashboard
+![Nirvami Dashboard](Dashborad.png)
+*Comprehensive wellness dashboard with real-time metrics and insights*
+
+---
+
+## ✨ Why Nirvami?
+
+<table>
+<tr>
+<td width="50%">
+
+**🎯 Personalized Wellness**
+- Dosha-based Ayurvedic recommendations
+- AI-driven emotion analysis
+- Custom wellness scoring
+- Adaptive guidance
+
+**🤖 AI-Powered Intelligence**
+- Google Gemini chatbot
+- Automatic recommendation extraction
+- Emotion detection from text
+- Predictive health insights
+
+</td>
+<td width="50%">
+
+**📱 Comprehensive Tracking**
+- Wearable device integration
+- Meal-mood correlation
+- Daily routine monitoring
+- Real-time health alerts
+
+**🔔 Smart Notifications**
+- SMS alerts via Twilio
+- In-app health warnings
+- Anomaly detection
+- Proactive wellness reminders
+
+</td>
+</tr>
+</table>
 
 ---
 
 ## 🌟 Key Features
+
+> **Nirvami combines cutting-edge AI with time-tested Ayurvedic principles to deliver a comprehensive mental wellness experience.**
 
 ### 🧠 AI-Powered Emotion Intelligence
 - **Multi-Modal Emotion Detection**: Analyze emotions from text, voice, and user interactions
@@ -43,6 +104,7 @@
   - Sedentary behavior
   - Combined risk factors (sleep + stress, activity + stress, triple threat)
 - **Smart Notifications**: In-app alerts with SMS support for critical health events
+- **SMS Notifications**: Automatic SMS alerts sent via Twilio when wearable data analysis is complete
 
 ### 🍽️ Meal & Diet Tracking
 - **Meal Logging**: Record meals with timestamps and descriptions
@@ -63,10 +125,12 @@
 - **Custom Activities**: Flexible logging for personalized wellness activities
 
 ### 💬 AI Chatbot Companion
-- **Conversational AI**: Powered by Google Gemini for natural, empathetic interactions
+- **Conversational AI**: Powered by Google Gemini (gemini-flash-latest) for natural, empathetic interactions
 - **Context-Aware Responses**: Chatbot understands user's emotional state and history
 - **Real-Time Emotion Detection**: Analyzes conversation sentiment to update mood logs
 - **Personalized Guidance**: Provides recommendations based on user's dosha, wellness score, and current state
+- **Smart Recommendation Extraction**: Automatically extracts and saves actionable wellness recommendations (yoga poses, breathing techniques, meditation practices) to recommendations page
+- **Mental Health Focus**: Specialized in yoga, Ayurveda, meditation, breathing exercises, and holistic wellness
 
 ### 📈 Dashboard & Analytics
 - **Unified Health Dashboard**: Real-time overview of all wellness metrics
@@ -80,21 +144,26 @@
 ## 🏗️ Technology Stack
 
 ### Frontend
-- **Framework**: React 18 + TypeScript
-- **Styling**: TailwindCSS + Custom CSS
-- **Animations**: Framer Motion
-- **State Management**: React Hooks + Context API
-- **HTTP Client**: Axios
-- **Build Tool**: Vite
+| Technology | Purpose |
+|-----------|----------|
+| **React 18 + TypeScript** | Component-based UI with type safety |
+| **TailwindCSS** | Utility-first styling framework |
+| **Framer Motion** | Smooth animations and transitions |
+| **React Hooks + Context API** | State management |
+| **Axios** | HTTP client for API calls |
+| **Vite** | Fast build tool and dev server |
 
 ### Backend
-- **Framework**: FastAPI (Python 3.10+)
-- **Database**: Supabase (PostgreSQL)
-- **Authentication**: JWT + Supabase Auth
-- **AI/ML Models**:
-  - Google Flan-T5-Base (text emotion analysis)
-  - Sentence Transformers MiniLM-L6-v2 (semantic embeddings)
-  - Google Gemini (conversational AI)
+| Technology | Purpose |
+|-----------|----------|
+| **FastAPI** | High-performance Python web framework |
+| **Supabase (PostgreSQL)** | Database and authentication |
+| **JWT** | Secure token-based authentication |
+| **Google Flan-T5-Base** | Text emotion analysis |
+| **Sentence Transformers MiniLM-L6-v2** | Semantic embeddings for RAG |
+| **Google Gemini (gemini-flash-latest)** | Conversational AI chatbot |
+| **Twilio SMS API** | SMS notifications |
+| **Redis** | Background job queue |
 - **Background Jobs**: RQ (Redis Queue)
 - **API Documentation**: Swagger/OpenAPI
 
@@ -110,19 +179,46 @@
 - `yoga_content` - Pose library with instructions
 - `messages` - Chat history with AI companion
 - `health_alerts` - Automated health notifications
+- `recommendations` - AI-extracted wellness recommendations from chatbot
 
 ---
 
 ## 🚀 Getting Started
 
 ### Prerequisites
-- **Node.js** 18+ and npm
-- **Python** 3.10+
-- **Supabase Account** (for database)
-- **Redis** (for background jobs)
-- **Google Gemini API Key** (for chatbot)
 
-### Installation
+Ensure you have the following installed and configured:
+
+| Requirement | Version | Purpose |
+|------------|---------|----------|
+| **Node.js** | 18+ | Frontend development |
+| **Python** | 3.10+ | Backend API |
+| **Supabase Account** | - | PostgreSQL database |
+| **Redis** | Latest | Background job processing |
+| **Google Gemini API** | gemini-flash-latest | AI chatbot |
+| **Twilio Account** | - | SMS notifications (optional) |
+
+### Quick Start
+
+```bash
+# Clone the repository
+git clone https://github.com/Supriya-gouda/Nirvami.git
+cd Nirvami
+
+# Start frontend (Terminal 1)
+cd frontend
+npm install
+npm run dev
+
+# Start backend (Terminal 2)
+cd backend
+python -m venv venv
+.\venv\Scripts\activate
+pip install -r requirements.txt
+python run_dev.py
+```
+
+### Detailed Installation
 
 #### 1. Clone Repository
 ```bash
@@ -160,8 +256,11 @@ pip install -r requirements.txt
 # Copy .env.example to .env and fill in:
 # - SUPABASE_URL
 # - SUPABASE_SERVICE_KEY
-# - GEMINI_API_KEY
+# - GEMINI_API_KEY (for gemini-flash-latest model)
 # - JWT_SECRET_KEY
+# - TWILIO_ACCOUNT_SID (optional - for SMS)
+# - TWILIO_AUTH_TOKEN (optional - for SMS)
+# - TWILIO_MESSAGING_SERVICE_SID (optional - for SMS)
 
 # Apply database schema
 python scripts/apply_schema.py
@@ -319,6 +418,8 @@ Nirvami/
 
 ### Chat
 - `POST /api/v1/chat/message` - Send message to AI chatbot
+- `GET /api/v1/chat/history` - Get chat history
+- `GET /api/v1/recommendations` - Get AI-extracted recommendations by category
 - `GET /api/v1/chat/history` - Get chat conversation history
 
 ### Alerts
@@ -373,6 +474,7 @@ Nirvami/
 - ✅ Apple Health XML bulk upload
 - ✅ Real-time health anomaly detection (6+ types)
 - ✅ Automated health alerts with SMS support
+- ✅ SMS notifications via Twilio when wearable data analysis is complete
 - ✅ 30-day health history tracking
 - ✅ Latest snapshot display on dashboard
 
@@ -396,11 +498,14 @@ Nirvami/
 - ✅ Routine history and analytics
 
 #### AI Chatbot
-- ✅ Google Gemini-powered conversational AI
-- ✅ Context-aware responses
-- ✅ Real-time emotion detection from chat
-- ✅ Personalized guidance based on user state
+- ✅ Google Gemini gemini-flash-latest powered conversational AI
+- ✅ Context-aware responses with mental health focus
+- ✅ Real-time emotion detection from chat conversations
+- ✅ Personalized guidance based on user state and dosha
 - ✅ Chat history storage and retrieval
+- ✅ Automatic recommendation extraction (yoga, breathing, meditation)
+- ✅ Smart parsing of chat responses into actionable wellness tips
+- ✅ Recommendations saved to dedicated recommendation pages by category
 
 #### Dashboard & Analytics
 - ✅ Unified health overview dashboard
@@ -421,6 +526,15 @@ Nirvami/
 - 🔜 Export health data (CSV, PDF reports)
 - 🔜 Multi-language support
 - 🔜 Dark mode theme
+
+---
+
+## 📚 Documentation
+
+- **[Project Structure](PROJECT_STRUCTURE.md)** - Detailed codebase organization
+- **[Frontend Guide](frontend/README.md)** - React component documentation
+- **[Backend Guide](backend/README.md)** - API and service architecture
+- **[Database Schema](backend/database/schema.sql)** - Complete PostgreSQL schema
 
 ---
 
@@ -494,17 +608,51 @@ Copyright © 2025 Nirvami. All rights reserved.
 
 ---
 
-## 📞 Contact
+## 📞 Contact & Support
 
-- **Repository**: [github.com/Supriya-gouda/Nirvami](https://github.com/Supriya-gouda/Nirvami)
-- **Branch**: main
+<table>
+<tr>
+<td>
+
+**Repository**  
+[github.com/Supriya-gouda/Nirvami](https://github.com/Supriya-gouda/Nirvami)
+
+**Branch**  
+`main`
+
+</td>
+<td>
+
+**Development Status**  
+🟢 Active Development
+
+**Version**  
+v1.0.0 (December 2024)
+
+</td>
+</tr>
+</table>
 
 ---
 
 ## 🙏 Acknowledgments
 
 - **Ayurvedic Wisdom**: Ancient principles adapted for modern wellness
-- **Google Gemini**: Conversational AI capabilities
+- **Google Gemini**: Conversational AI capabilities (gemini-flash-latest model)
 - **Supabase**: Backend infrastructure and database
+- **Twilio**: SMS notification service for health alerts
+- **Hugging Face**: Open-source ML models (Flan-T5, Sentence Transformers)
+
+---
+
+<div align="center">
+
+**Built with ❤️ for mental wellness**
+
+*Empowering individuals through AI-driven holistic health solutions*
+
+Last Updated: December 8, 2024
+
+</div>
 - **Framer Motion**: Beautiful UI animations
 - **Open Source Community**: ML models and libraries

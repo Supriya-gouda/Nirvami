@@ -359,30 +359,35 @@ class RecommendationService:
             logger.info(f"[REC_EXTRACT] Using Gemini to parse message length: {len(message_text)}")
             
             # Create extraction prompt
-            extraction_prompt = f"""You are an expert AI recommendation parser. Analyze the following assistant response and extract ONLY actionable yoga, Ayurveda, and lifestyle recommendations.
+            extraction_prompt = f"""You are an expert AI recommendation parser. Analyze the following wellness assistant response and extract ONLY specific, actionable recommendations.
 
-IMPORTANT RULES:
-1. Only extract specific, actionable recommendations (not general explanations)
-2. Each recommendation should be something the user can actually DO
-3. Be specific about yoga poses, breathing techniques, lifestyle changes, diet suggestions, etc.
-4. If no actionable recommendations exist, return an empty array []
+CRITICAL EXTRACTION RULES:
+1. Extract ONLY direct recommendations the user can practice (yoga poses, breathing techniques, meditation practices, lifestyle changes)
+2. Each recommendation must be a specific technique, practice, or action
+3. If the message is asking questions or having a conversation without giving specific practices, return []
+4. The title should be the NAME of the technique/practice (e.g., "Child's Pose", "Box Breathing", "Morning Meditation")
+5. The content should explain HOW to do it with step-by-step instructions
 
-CATEGORIES:
-- "yoga": Specific yoga poses, movements, stretches, physical practices
-- "ayurveda": Ayurvedic practices, doshas, traditional remedies, herbs
-- "lifestyle": Daily routine changes, habits, environment adjustments  
-- "sleep": Sleep-related practices, bedtime routines, sleep hygiene
-- "breathing": Pranayama, breathing exercises, breathwork
-- "meditation": Meditation techniques, mindfulness practices
-- "diet": Specific food recommendations, eating habits, nutrition
+CATEGORIES (choose the most specific):
+- "yoga": Specific yoga poses, asanas (e.g., Balasana, Shavasana, Sun Salutation)
+- "breathing": Pranayama techniques, breathing exercises (e.g., Sama Vritti, Box Breathing, 4-7-8 Breathing)
+- "meditation": Meditation techniques, mindfulness practices (e.g., Body Scan, Loving-kindness Meditation)
+- "ayurveda": Ayurvedic remedies, herbs, dosha practices
+- "lifestyle": Daily routines, habits, environment changes
+- "sleep": Sleep hygiene practices, bedtime routines
+- "diet": Specific foods, eating habits, nutrition advice
 
-Return ONLY valid JSON in this exact format:
+TITLE FORMAT EXAMPLES:
+✅ Good: "Child's Pose (Balasana)", "Box Breathing", "Morning Sun Salutation"
+❌ Bad: "Practice yoga pose", "Try breathing", "Daily Child's Pose (Balasana)"
+
+Return ONLY valid JSON array (empty [] if no specific recommendations found):
 
 [
   {{
-    "category": "yoga|ayurveda|lifestyle|sleep|breathing|meditation|diet",
-    "title": "Brief descriptive title (max 50 chars)",
-    "content": "Detailed actionable recommendation with specific steps"
+    "category": "yoga|breathing|meditation|ayurveda|lifestyle|sleep|diet",
+    "title": "Specific technique/practice name",
+    "content": "Clear step-by-step instructions on how to practice this recommendation"
   }}
 ]
 

@@ -4,7 +4,6 @@ import { Dashboard } from './components/Dashboard';
 import { ChatbotPage } from './components/ChatbotPage';
 import { ConversationHistoryPage } from './components/ConversationHistoryPage';
 import { LogPage } from './components/LogPage';
-import { YogaLifestylePage } from './components/YogaLifestylePage';
 import { YogaRecommendationPage } from './components/YogaRecommendationPage';
 import { AyurvedaRecommendationPage } from './components/AyurvedaRecommendationPage';
 import { DietMoodPage } from './components/DietMoodPage';
@@ -25,7 +24,7 @@ import { Toaster } from './components/ui/sonner';
 import { useAuth } from './contexts/AuthContext';
 import api from './services/api';
 
-export type PageType = 'landing' | 'signin' | 'signup' | 'dashboard' | 'chatbot' | 'conversation-history' | 'manual' | 'moodboard' | 'yoga' | 'yoga-recommendations' | 'ayurveda-recommendations' | 'diet' | 'progress' | 'emotion-history' | 'aura' | 'device' | 'dosha' | 'profile' | 'settings' | 'routines' | 'dinacharya';
+export type PageType = 'landing' | 'signin' | 'signup' | 'dashboard' | 'chatbot' | 'conversation-history' | 'manual' | 'moodboard' | 'yoga-recommendations' | 'ayurveda-recommendations' | 'diet' | 'progress' | 'emotion-history' | 'aura' | 'device' | 'dosha' | 'profile' | 'settings' | 'routines' | 'dinacharya';
 
 function App() {
   const { user, isAuthenticated, isLoading, logout } = useAuth();
@@ -232,7 +231,6 @@ function App() {
       {currentPage === 'conversation-history' && <ConversationHistoryPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
       {currentPage === 'manual' && <LogPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
       {currentPage === 'moodboard' && <LogPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
-      {currentPage === 'yoga' && <YogaLifestylePage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
       {currentPage === 'yoga-recommendations' && <YogaRecommendationPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
       {currentPage === 'ayurveda-recommendations' && <AyurvedaRecommendationPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
       {currentPage === 'diet' && <DietMoodPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}

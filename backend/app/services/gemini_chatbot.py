@@ -79,9 +79,9 @@ class GeminiChatbot:
             genai.configure(api_key=self.api_key)
             
             # Initialize model with safety settings in list format (newer SDK)
-            # Using gemini-2.0-flash-001 (stable) - gemini-1.5-flash is deprecated
+            # Using gemini-flash-latest (stable with free tier)
             self.model = genai.GenerativeModel(
-                model_name="gemini-2.0-flash-001",
+                model_name="gemini-flash-latest",
                 system_instruction=SYSTEM_INSTRUCTION,
                 safety_settings=[
                     {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
@@ -92,7 +92,7 @@ class GeminiChatbot:
             )
             self.system_instruction = SYSTEM_INSTRUCTION
             
-            logger.info("✅ Gemini chatbot initialized successfully with model: gemini-2.0-flash-001")
+            logger.info("✅ Gemini chatbot initialized successfully with model: gemini-flash-latest")
             
         except Exception as e:
             logger.error(f"❌ Failed to initialize Gemini: {e}", exc_info=True)

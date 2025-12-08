@@ -149,25 +149,32 @@ async def analyze_health(
         except Exception as notif_error:
             logger.error(f"Failed to create notification: {notif_error}")
         
-        # Send SMS if critical
-        if analysis['risk_level'] in ["high", "critical"]:
-            try:
-                # Get user profile with phone number
-                profile = supabase.table("profiles").select("phone_number").eq("id", current_user_id).single().execute()
+        # Send SMS notification for ALL analysis completions (not just critical)
+        try:
+            # Get user profile with phone number
+            profile = supabase.table("profiles").select("phone_number").eq("id", current_user_id).single().execute()
+            
+            if profile.data and profile.data.get("phone_number"):
+                phone = profile.data["phone_number"]
                 
-                if profile.data and profile.data.get("phone_number"):
-                    phone = profile.data["phone_number"]
-                    sms_message = f"Nirvami Health Alert: {analysis['risks'][0]}. Check the app for recommendations."
-                    
-                    await AlertService.send_sms_alert(
-                        to_phone=phone,
-                        message=sms_message
-                    )
-                    
-                    logger.info(f"📱 Sent SMS alert to user {current_user_id}")
-                    
-            except Exception as sms_error:
-                logger.error(f"Failed to send SMS: {sms_error}")
+                # Create SMS message based on risk level
+                if analysis['has_risks']:
+                    risk_summary = analysis['risks'][0] if analysis['risks'] else "Health analysis completed"
+                    sms_message = f"🏥 Nirvami Health Alert: {risk_summary}. Check the app for detailed recommendations."
+                else:
+                    sms_message = "✅ Nirvami: Your health analysis is complete. No concerns detected. Great job!"
+                
+                await AlertService.send_sms_alert(
+                    to_phone=phone,
+                    message=sms_message
+                )
+                
+                logger.info(f"📱 Sent SMS notification to user {current_user_id} at {phone}")
+            else:
+                logger.info(f"ℹ️ No phone number found for user {current_user_id}, skipping SMS")
+                
+        except Exception as sms_error:
+            logger.error(f"Failed to send SMS: {sms_error}", exc_info=True)
         
         return {
             "success": True,
@@ -264,9 +271,9 @@ async def upload_xml_and_analyze(
         analysis = WearableService.analyze_health_risks(current_user_id)
         
         # Create notification if risks found (same as analyze endpoint)
+        supabase = get_supabase(use_service_role=True)
+        
         if analysis["has_risks"]:
-            supabase = get_supabase(use_service_role=True)
-            
             risk_emoji = {
                 "low": "ℹ️",
                 "medium": "⚠️",
@@ -290,6 +297,33 @@ async def upload_xml_and_analyze(
                 logger.info(f"✅ Created in-app notification")
             except Exception as notif_error:
                 logger.error(f"Failed to create notification: {notif_error}")
+        
+        # Send SMS notification for ALL analysis completions from XML upload
+        try:
+            # Get user profile with phone number
+            profile = supabase.table("profiles").select("phone_number").eq("id", current_user_id).single().execute()
+            
+            if profile.data and profile.data.get("phone_number"):
+                phone = profile.data["phone_number"]
+                
+                # Create SMS message based on analysis results
+                if analysis['has_risks']:
+                    risk_summary = analysis['risks'][0] if analysis['risks'] else "Health analysis completed"
+                    sms_message = f"🏥 Nirvami: Apple Watch data analyzed. {risk_summary}. Check the app for details."
+                else:
+                    sms_message = f"✅ Nirvami: Apple Watch data analyzed. {saved_count} days processed. No concerns detected!"
+                
+                await AlertService.send_sms_alert(
+                    to_phone=phone,
+                    message=sms_message
+                )
+                
+                logger.info(f"📱 Sent SMS notification to user {current_user_id} at {phone}")
+            else:
+                logger.info(f"ℹ️ No phone number found for user {current_user_id}, skipping SMS")
+                
+        except Exception as sms_error:
+            logger.error(f"Failed to send SMS notification: {sms_error}", exc_info=True)
         
         # Get latest snapshot for display
         latest_snapshot = daily_snapshots[-1] if daily_snapshots else {}

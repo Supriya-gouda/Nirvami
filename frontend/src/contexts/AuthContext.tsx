@@ -3,7 +3,8 @@ import api from '../services/api';
 
 export interface User {
   id: string;
-  name: string;
+  name: string; // Display name (derived from full_name)
+  full_name?: string; // Full name from profile
   email: string;
   isGuest: boolean;
 }
@@ -42,8 +43,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(parsed);
           setIsLoading(false);
           
-          // Verify token in background (non-blocking)
-          api.getCurrentUser().catch((error) => {
+          // Refresh user data in background if full_name is missing or to verify token
+          api.getCurrentUser().then((userData) => {
+            const userObj = {
+              id: userData.id,
+              name: userData.full_name || userData.email.split('@')[0],
+              full_name: userData.full_name,
+              email: userData.email,
+              isGuest: false
+            };
+            setUser(userObj);
+            localStorage.setItem('nirvami_user', JSON.stringify(userObj));
+          }).catch((error) => {
             console.error('Background token validation failed:', error);
             localStorage.removeItem('nirvami_auth_token');
             localStorage.removeItem('nirvami_user');
@@ -61,6 +72,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const userObj = {
           id: userData.id,
           name: userData.full_name || userData.email.split('@')[0],
+          full_name: userData.full_name,
           email: userData.email,
           isGuest: false
         };
@@ -90,6 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const userObj = {
         id: response.user.id,
         name: response.user.full_name || email.split('@')[0],
+        full_name: response.user.full_name,
         email: response.user.email,
         isGuest: false
       };
@@ -120,6 +133,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const userObj = {
         id: response.user.id,
         name: response.user.full_name || response.user.email?.split('@')[0] || name,
+        full_name: response.user.full_name,
         email: response.user.email,
         isGuest: false
       };
@@ -145,6 +159,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const userObj = {
         id: userData.id,
         name: userData.full_name || userData.email.split('@')[0],
+        full_name: userData.full_name,
         email: userData.email,
         isGuest: false
       };

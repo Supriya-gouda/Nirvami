@@ -33,7 +33,7 @@ export function ChatbotPage({ user, onNavigate, onLogout, onOpenNotifications }:
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
-      text: `Hello ${user?.full_name || 'User'}! I'm your AI wellness companion powered by Ayurvedic wisdom. How are you feeling today?`,
+      text: `Hello ${user?.full_name || user?.name || 'there'}! I'm Nirvami, your AI wellness companion powered by Ayurvedic wisdom. How are you feeling today?`,
       sender: 'bot',
       timestamp: new Date(),
     },

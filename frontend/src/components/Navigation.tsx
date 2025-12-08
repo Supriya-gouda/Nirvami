@@ -40,7 +40,6 @@ export function Navigation({ currentPage, onNavigate, onLogout, user, onOpenNoti
     { id: 'chatbot' as PageType, icon: MessageCircle, label: 'Chat' },
     { id: 'dinacharya' as PageType, icon: CalendarCheck, label: 'Dinacharya' },
     { id: 'aura' as PageType, icon: Sparkles, label: 'Aura' },
-    { id: 'yoga' as PageType, icon: Activity, label: 'Yoga' },
     { id: 'yoga-recommendations' as PageType, icon: Target, label: 'Yoga Recs' },
     { id: 'ayurveda-recommendations' as PageType, icon: Leaf, label: 'Ayurveda Recs' },
     { id: 'diet' as PageType, icon: UtensilsCrossed, label: 'Diet' },

@@ -168,13 +168,21 @@ class AlertService:
         try:
             client = TwilioClient(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
             
-            message = client.messages.create(
-                body=message,
-                from_=settings.TWILIO_PHONE_NUMBER,
-                to=to_phone
-            )
+            # Use Messaging Service SID if available, otherwise use phone number
+            if settings.TWILIO_MESSAGING_SERVICE_SID:
+                sms = client.messages.create(
+                    body=message,
+                    messaging_service_sid=settings.TWILIO_MESSAGING_SERVICE_SID,
+                    to=to_phone
+                )
+            else:
+                sms = client.messages.create(
+                    body=message,
+                    from_=settings.TWILIO_PHONE_NUMBER,
+                    to=to_phone
+                )
             
-            logger.info(f"SMS sent to {to_phone}: {message.sid}")
+            logger.info(f"SMS sent to {to_phone}: {sms.sid}")
         except Exception as e:
             logger.error(f"Error sending SMS: {e}")
             raise

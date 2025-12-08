@@ -410,7 +410,7 @@ export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications, onR
           className="mb-6"
         >
           <h1 className="text-4xl font-bold text-gray-800 mb-2">
-            Welcome back, {user?.full_name || 'User'}! 🙏
+            Welcome back, {user?.full_name || user?.name || 'User'}! 🙏
           </h1>
           <p className="text-gray-600">Your holistic wellness journey continues</p>
         </motion.div>

@@ -7,6 +7,8 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 from app.utils.database import get_supabase
 from app.services.alert_service import AlertService
+from app.services.notification_service import get_notification_service
+from app.services.sms_service import get_sms_service
 
 logger = logging.getLogger(__name__)
 
@@ -252,29 +254,25 @@ class WearableHealthAnalyzer:
             Created alert data
         """
         try:
-            # Get user profile and preferences
+            # Get user profile for phone number
             profile_result = supabase.table("profiles").select(
                 "id, email, phone_number"
             ).eq("id", user_id).single().execute()
             
-            prefs_result = supabase.table("user_preferences").select(
-                "notification_sms, notification_email, notification_push"
-            ).eq("user_id", user_id).single().execute()
-            
             profile = profile_result.data if profile_result.data else {}
-            preferences = prefs_result.data if prefs_result.data else {}
+            phone_number = profile.get("phone_number")
             
             # Create alert title and message
             anomaly_text = ", ".join(anomalies)
             title = f"Health Alert: {anomaly_text.capitalize()}"
             
-            # Get top 2 recommendations for concise message
-            top_recommendations = recommendations[:2]
+            # Get top recommendations for concise message
+            top_recommendations = recommendations[:3]
             rec_text = " ".join(f"{i+1}. {rec}" for i, rec in enumerate(top_recommendations))
             
             message = f"We detected {anomaly_text}. Recommendations: {rec_text}"
             
-            # Create alert record in database
+            # Create alert record in database using AlertService
             alert_result = await AlertService.create_wearable_alert(
                 supabase=supabase,
                 user_id=user_id,
@@ -285,61 +283,64 @@ class WearableHealthAnalyzer:
                 snapshot_data=snapshot_data
             )
             
-            # ALWAYS create in-app notification
-            await AlertService.create_in_app_notification(
-                supabase=supabase,
+            # 1. ALWAYS create in-app notification
+            notification_service = get_notification_service()
+            risk_level = "high" if severity in ["high", "critical"] else "medium" if severity == "medium" else "low"
+            
+            notification = await notification_service.create_health_alert_notification(
                 user_id=user_id,
-                title=title,
-                body=message,
-                notification_type="warning" if severity in ["high", "critical"] else "info",
-                action_url="/device"
+                concerns=anomalies,
+                recommendations=recommendations,
+                risk_level=risk_level
             )
             
-            logger.info(f"Created in-app notification for user {user_id}")
+            if notification:
+                logger.info(f"✅ Created in-app notification for user {user_id}")
+            else:
+                logger.warning(f"⚠️ Failed to create in-app notification for user {user_id}")
             
-            # Send SMS if conditions are met:
-            # 1. SMS toggle is ON
-            # 2. Phone number exists
-            phone_number = profile.get("phone_number")
-            sms_enabled = preferences.get("notification_sms", False)
-            
-            if sms_enabled and phone_number:
+            # 2. Send SMS if phone number exists
+            if phone_number:
                 try:
-                    # Create concise SMS message
-                    sms_message = f"Nirvami Health Alert: {anomaly_text.capitalize()}. {top_recommendations[0] if top_recommendations else 'Check the app for details.'}"
+                    sms_service = get_sms_service()
                     
-                    await AlertService.send_sms_alert(
-                        to_phone=phone_number,
-                        message=sms_message
+                    # Send SMS with concerns and recommendations
+                    sms_sent = await sms_service.send_health_alert(
+                        to_number=phone_number,
+                        concerns=anomalies[:3],  # Limit to 3 for SMS length
+                        recommendations=recommendations[:3]
                     )
                     
-                    logger.info(f"Sent SMS alert to user {user_id} at {phone_number}")
-                    
-                    # Update alert to reflect SMS was sent
-                    supabase.table("alerts").update({
-                        "notified_channels": ["in_app", "sms"]
-                    }).eq("id", alert_result["id"]).execute()
+                    if sms_sent:
+                        logger.info(f"✅ SMS alert sent to user {user_id} at {phone_number}")
+                        
+                        # Update alert to reflect SMS was sent
+                        supabase.table("alerts").update({
+                            "notified_via_sms": True,
+                            "sms_sent_at": datetime.now().isoformat()
+                        }).eq("id", alert_result["id"]).execute()
+                    else:
+                        logger.warning(f"⚠️ SMS failed for user {user_id}")
                     
                 except Exception as sms_error:
-                    logger.error(f"Failed to send SMS alert: {sms_error}")
+                    logger.error(f"❌ Failed to send SMS alert: {sms_error}")
                     # Don't fail the whole process if SMS fails
-                    
-            elif sms_enabled and not phone_number:
-                # User wants SMS but hasn't added phone number
-                await AlertService.create_in_app_notification(
-                    supabase=supabase,
+            else:
+                logger.info(f"ℹ️ No phone number for user {user_id}, skipping SMS")
+                
+                # Create a gentle reminder notification to add phone number
+                await notification_service.create_notification(
                     user_id=user_id,
-                    title="Add Phone Number for SMS Alerts",
-                    body="You have SMS notifications enabled but no phone number on file. Please add your phone number in Settings to receive SMS alerts.",
-                    notification_type="info",
-                    action_url="/settings"
+                    notification_type="system",
+                    title="📱 Add Phone Number for SMS Alerts",
+                    message="Enable SMS health alerts by adding your phone number in Account Settings.",
+                    data={"action_url": "/account-settings"}
                 )
-                logger.info(f"User {user_id} has SMS enabled but no phone number")
             
             return alert_result
             
         except Exception as e:
-            logger.error(f"Error creating wearable alert: {e}")
+            logger.error(f"❌ Error creating wearable alert: {e}")
             raise
 
 

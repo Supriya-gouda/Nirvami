@@ -9,7 +9,8 @@ export interface ApiResponse<T = any> {
 export interface User {
   id: string;
   email: string;
-  full_name?: string;
+  name?: string; // From AuthContext
+  full_name?: string; // From backend profile
   age?: number;
   gender?: string;
   created_at: string;
@@ -270,26 +271,28 @@ export interface SubmitDoshaRequest {
 export interface Meal {
   id: string;
   user_id: string;
+  meal_time: string;
   meal_type: 'breakfast' | 'lunch' | 'dinner' | 'snack';
-  foods: string[];
-  portion_sizes?: Record<string, string>;
+  meal_text: string;
+  ingredients: string[];
+  dosha_impact_tags: any;
   calories?: number;
-  mood_before?: string;
-  mood_after?: string;
-  notes?: string;
-  photo_url?: string;
+  embedding?: number[];
   created_at: string;
 }
 
+export interface TodaysMeals {
+  breakfast: Meal[];
+  lunch: Meal[];
+  dinner: Meal[];
+  snack: Meal[];
+}
+
 export interface LogMealRequest {
+  meal_text: string;
   meal_type: 'breakfast' | 'lunch' | 'dinner' | 'snack';
-  foods: string[];
-  portion_sizes?: Record<string, string>;
-  calories?: number;
-  mood_before?: string;
-  mood_after?: string;
+  meal_time: string;
   notes?: string;
-  photo_url?: string;
 }
 
 export interface MealMoodCorrelation {

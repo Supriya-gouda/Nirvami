@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     TWILIO_ACCOUNT_SID: str = ""
     TWILIO_AUTH_TOKEN: str = ""
     TWILIO_PHONE_NUMBER: str = ""
+    TWILIO_MESSAGING_SERVICE_SID: str = ""
     
     # Email
     SMTP_HOST: str = "smtp.gmail.com"
@@ -31,7 +32,7 @@ class Settings(BaseSettings):
     FROM_EMAIL: str = "noreply@nirvami.app"
     
     # Google Gemini API
-    GEMINI_API_KEY: str = "AIzaSyBFHO2J5KWaKcFGZ4V3DYOj_fpXu80XjP4"
+    GEMINI_API_KEY: str = "AIzaSyCZ4ylp8dpuN2nSzJNe-clic-ex_GKOvPQ"
     
     # Application
     SECRET_KEY: str

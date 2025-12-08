@@ -26,7 +26,8 @@ from app.api.routes import (
     journal,
     goals,
     dinacharya,
-    recommendations  # New unified recommendation routes
+    recommendations,  # New unified recommendation routes
+    notifications  # Notification routes
 )
 from app.api.routes import wearable_v2  # New simplified wearable routes
 from app.ml.model_manager import ModelManager
@@ -145,6 +146,7 @@ app.include_router(wearable_v2.router, prefix=f"/api/{settings.API_VERSION}/wear
 app.include_router(watch.router, prefix=f"/api/{settings.API_VERSION}/watch", tags=["Watch"])
 app.include_router(analytics.router, prefix=f"/api/{settings.API_VERSION}/analytics", tags=["Analytics"])
 app.include_router(alerts.router, prefix=f"/api/{settings.API_VERSION}/alerts", tags=["Alerts"])
+app.include_router(notifications.router, prefix=f"/api/{settings.API_VERSION}/notifications", tags=["Notifications"])
 app.include_router(admin.router, prefix=f"/api/{settings.API_VERSION}/admin", tags=["Admin"])
 
 # Temporary Debug Endpoint

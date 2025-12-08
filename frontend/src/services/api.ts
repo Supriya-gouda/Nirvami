@@ -28,6 +28,7 @@ import type {
   DoshaRecommendations,
   SubmitDoshaRequest,
   Meal,
+  TodaysMeals,
   LogMealRequest,
   MealMoodCorrelation,
   WearableSnapshot,
@@ -668,6 +669,46 @@ class ApiService {
   async getTodayMeals(): Promise<Meal[]> {
     const today = new Date().toISOString().split('T')[0];
     return this.getMealHistory({ start_date: today, end_date: today });
+  }
+
+  async getTodayMealsFormatted(): Promise<{ meals: TodaysMeals }> {
+    const response = await this.api.get('/meals/today');
+    return response.data;
+  }
+
+  async getWeeklyMealPattern(weeks: number = 4): Promise<{ pattern: any[] }> {
+    const response = await this.api.get(`/meals/weekly-pattern?weeks=${weeks}`);
+    return response.data;
+  }
+
+  async getMoodInsights(): Promise<{
+    insights: any[];
+    top_positive_foods: any[];
+    foods_to_moderate: any[];
+    recommendations: any[];
+  }> {
+    const response = await this.api.get('/meals/mood-insights');
+    return response.data;
+  }
+
+  async getAyurvedaGuidelines(): Promise<any[]> {
+    const response = await this.api.get('/meals/ayurveda-guidelines');
+    return response.data;
+  }
+
+  async getDailyMealAnalysis(): Promise<any> {
+    const response = await this.api.get('/meals/daily-analysis');
+    return response.data;
+  }
+
+  async getMoodCorrelationsWithDays(days: number = 30): Promise<{ correlations: any[] }> {
+    const response = await this.api.get(`/meals/mood-correlations?days=${days}`);
+    return response.data;
+  }
+
+  async getWeeklyCounts(): Promise<any[]> {
+    const response = await this.api.get('/meals/weekly-counts');
+    return response.data;
   }
 
   // ==================== Wearable Methods ====================
