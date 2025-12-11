@@ -163,9 +163,7 @@
 | **Sentence Transformers MiniLM-L6-v2** | Semantic embeddings for RAG |
 | **Google Gemini (gemini-flash-latest)** | Conversational AI chatbot |
 | **Twilio SMS API** | SMS notifications |
-| **Redis** | Background job queue |
-- **Background Jobs**: RQ (Redis Queue)
-- **API Documentation**: Swagger/OpenAPI
+
 
 ### Database Schema
 - `profiles` - User accounts and preferences
