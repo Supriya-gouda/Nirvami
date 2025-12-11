@@ -45,6 +45,8 @@ export function ChatbotPage({ user, onNavigate, onLogout, onOpenNotifications }:
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | undefined>(undefined);
   const [crisisAlert, setCrisisAlert] = useState<string | null>(null);
+  const [showCrisisModal, setShowCrisisModal] = useState(false);
+  const [crisisMessage, setCrisisMessage] = useState<string>('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const suggestedResponses = [
@@ -131,9 +133,19 @@ export function ChatbotPage({ user, onNavigate, onLogout, onOpenNotifications }:
 
       // Check for crisis detection
       if (response.crisis_detected) {
-        setCrisisAlert(
-          'We detected you might be in distress. If this is an emergency, please contact emergency services or your mental health professional immediately.'
-        );
+        const crisisMsg = 'We detected you might be in distress. If this is an emergency, please contact emergency services or your mental health professional immediately.';
+        setCrisisAlert(crisisMsg);
+        setCrisisMessage(crisisMsg);
+        setShowCrisisModal(true);
+        
+        // Notification is automatically created by backend when crisis is detected
+        // Trigger notification refresh if callback is available
+        if (onOpenNotifications) {
+          // Just to refresh the notification count
+          setTimeout(() => {
+            // This will be handled by the notification component's polling
+          }, 1000);
+        }
       }
 
       const botMessage: Message = {
@@ -391,6 +403,65 @@ export function ChatbotPage({ user, onNavigate, onLogout, onOpenNotifications }:
           )}
         </motion.div>
       </div>
+
+      {/* Crisis Alert Modal */}
+      <Dialog open={showCrisisModal} onOpenChange={setShowCrisisModal}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600 text-2xl">
+              <AlertTriangle className="w-8 h-8" />
+              Crisis Alert - Immediate Support Needed
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-6 py-4">
+            <div className="bg-red-50 border-2 border-red-500 rounded-lg p-6">
+              <p className="text-red-900 text-lg font-semibold mb-4">
+                {crisisMessage}
+              </p>
+              <div className="space-y-3 text-red-800">
+                <p className="text-base">
+                  I'm concerned about what you're sharing. Your wellbeing is important. Please consider reaching out to a crisis helpline:
+                </p>
+                <div className="bg-white rounded-md p-4 space-y-2">
+                  <p className="font-bold text-red-900 flex items-center gap-2">
+                    <span className="text-2xl">🆘</span>
+                    National Suicide Prevention Lifeline: 988 (US)
+                  </p>
+                  <p className="font-bold text-red-900 flex items-center gap-2">
+                    <span className="text-2xl">🆘</span>
+                    Crisis Text Line: Text HOME to 741741
+                  </p>
+                  <p className="font-bold text-red-900 flex items-center gap-2">
+                    <span className="text-2xl">🌐</span>
+                    International: findahelpline.com
+                  </p>
+                </div>
+                <p className="text-base mt-4">
+                  Would you like me to help you find local resources?
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <Button
+                onClick={() => setShowCrisisModal(false)}
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white text-lg py-6"
+              >
+                I Understand
+              </Button>
+              <Button
+                onClick={() => {
+                  setShowCrisisModal(false);
+                  handleSendMessage('Yes, please help me find local resources');
+                }}
+                variant="outline"
+                className="flex-1 border-2 border-red-600 text-red-600 hover:bg-red-50 text-lg py-6"
+              >
+                Find Local Resources
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Voice Confirmation Dialog */}
       <Dialog open={showVoiceConfirm} onOpenChange={setShowVoiceConfirm}>

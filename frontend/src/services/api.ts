@@ -49,6 +49,9 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
+// Increase timeout for AI model operations
+const API_TIMEOUT = 60000; // 60 seconds
+
 class ApiService {
   private api: AxiosInstance;
   private supabase: SupabaseClient;
@@ -61,7 +64,7 @@ class ApiService {
       headers: {
         'Content-Type': 'application/json',
       },
-      timeout: 30000, // 30 second timeout
+      timeout: API_TIMEOUT, // 60 second timeout for AI operations
     });
 
     // Initialize Supabase

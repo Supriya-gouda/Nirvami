@@ -76,6 +76,16 @@ class LogEmotionRequest(BaseModel):
     source: Optional[str] = None  # New field for mood popup
 
 
+async def update_aura_in_background(user_id: str, emotion_type: str, confidence: float, supabase):
+    """Background task to update aura without blocking the emotion log response."""
+    try:
+        aura_entry = await create_aura_entry_from_emotion(user_id, emotion_type, confidence, supabase)
+        logger.info(f"✅ Aura color updated to {aura_entry.get('color_code') if aura_entry else 'unknown'} for user {user_id}")
+    except Exception as aura_err:
+        logger.error(f"❌ Failed to create aura entry: {aura_err}")
+        # Don't fail - this is a background task
+
+
 @router.post("/log")
 async def log_emotion(
     data: LogEmotionRequest,
@@ -174,14 +184,13 @@ async def log_emotion(
             emotion_log_id = result.data[0]["id"]
             logger.info(f"Emotion logged for user {current_user_id}: {emotion_type} (source: {source})")
             
-            # CRITICAL: Create/update aura_entry IMMEDIATELY based on this emotion
+            # CRITICAL: Create/update aura_entry in background (non-blocking)
             # This triggers the real-time aura color update in the UI
-            try:
-                aura_entry = await create_aura_entry_from_emotion(current_user_id, emotion_type, data.intensity / 10.0, supabase)
-                logger.info(f"✅ Aura color updated to {aura_entry.get('color_code') if aura_entry else 'unknown'} for user {current_user_id}")
-            except Exception as aura_err:
-                logger.error(f"❌ Failed to create aura entry: {aura_err}")
-                # Don't fail the emotion log if aura creation fails
+            import asyncio
+            asyncio.create_task(
+                update_aura_in_background(current_user_id, emotion_type, data.intensity / 10.0, supabase)
+            )
+            logger.info(f"✅ Aura update queued for user {current_user_id}")
             
             # Return new API contract format for mood popup, legacy format otherwise
             if is_mood_popup:

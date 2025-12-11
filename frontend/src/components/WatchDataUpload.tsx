@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 import api from '../services/api';
 
 interface WatchDataUploadProps {
-  onSuccess?: () => void;
+  onSuccess?: (response?: any) => void;
 }
 
 export function WatchDataUpload({ onSuccess }: WatchDataUploadProps) {
@@ -57,6 +57,8 @@ export function WatchDataUpload({ onSuccess }: WatchDataUploadProps) {
       setStats(response);
       setUploadTimestamp(new Date().toLocaleString());
       
+      console.log('XML upload response:', response);
+      
       if (response.success) {
         const metrics = response.latest_metrics || {};
         const metricsMsg = [
@@ -67,15 +69,28 @@ export function WatchDataUpload({ onSuccess }: WatchDataUploadProps) {
         
         setMessage(response.message || 'Apple Watch data processed successfully!');
         
-        toast.success(`✅ Success! Processed ${response.days_processed} days of data`, {
-          description: metricsMsg || 'Data synced successfully'
-        });
+        // Show analysis result if available
+        if (response.analysis) {
+          console.log('Analysis result from XML upload:', response.analysis);
+          const analysisMsg = response.analysis.has_risks 
+            ? `${response.analysis.risks.length} health concern(s) detected from watch data` 
+            : 'No health risks detected';
+          
+          toast.success(`✅ Success! Processed ${response.days_processed} days of data`, {
+            description: analysisMsg,
+            duration: 5000
+          });
+        } else {
+          toast.success(`✅ Success! Processed ${response.days_processed} days of data`, {
+            description: metricsMsg || 'Data synced successfully'
+          });
+        }
       } else {
         toast.warning(response.message || 'No usable health data found in the file');
       }
 
       if (onSuccess) {
-        setTimeout(onSuccess, 2000);
+        setTimeout(() => onSuccess(response), 1500);
       }
 
       // Keep analysis visible - don't auto-clear

@@ -123,42 +123,45 @@ export function DietMoodPage({ user, onNavigate, onLogout, onOpenNotifications }
         notes: newMealNotes.trim()
       };
 
+      console.log('Logging meal:', mealData);
       const response = await api.logMeal(mealData);
+      console.log('Meal log response:', response);
       
-      if (response) {
-        // Store the analysis
-        if (response.analysis) {
-          setMealAnalysis(response.analysis);
-        }
-        
-        setMealSuccess('Meal logged and analyzed successfully! Check Ayurvedic Guidance below.');
-        
-        // Refresh all data including mood correlations and daily analysis
-        const [todaysData, guidelinesData, weeklyCountsData, correlationsData, insightsData, dailyAnalysisData] = await Promise.all([
-          api.getTodayMealsFormatted(),
-          api.getAyurvedaGuidelines(),
-          api.getWeeklyCounts(),
-          api.getMoodCorrelationsWithDays(30),
-          api.getMoodInsights(),
-          api.getDailyMealAnalysis()
-        ]);
-        
-        setTodaysMeals(todaysData.meals || { breakfast: [], lunch: [], dinner: [], snack: [] });
-        setAyurvedaGuidelines(guidelinesData || []);
-        setWeeklyCounts(weeklyCountsData || []);
-        setMoodCorrelations(correlationsData.correlations || []);
-        setMoodInsights(insightsData || { insights: [], top_positive_foods: [], foods_to_moderate: [], recommendations: [] });
-        setDailyAnalysis(dailyAnalysisData || null);
-
-        // Reset form
-        setNewMealText('');
-        setNewMealNotes('');
-        
-        setTimeout(() => setMealSuccess(null), 5000);
+      // Backend returns an object with success, message, meal, and analysis
+      // Store the analysis
+      const analysisData = (response as any).analysis || null;
+      if (analysisData) {
+        setMealAnalysis(analysisData);
       }
+      
+      setMealSuccess('Meal logged and analyzed successfully! Check Ayurvedic Guidance below.');
+      
+      // Refresh all data including mood correlations and daily analysis
+      const [todaysData, guidelinesData, weeklyCountsData, correlationsData, insightsData, dailyAnalysisData] = await Promise.all([
+        api.getTodayMealsFormatted(),
+        api.getAyurvedaGuidelines(),
+        api.getWeeklyCounts(),
+        api.getMoodCorrelationsWithDays(30),
+        api.getMoodInsights(),
+        api.getDailyMealAnalysis()
+      ]);
+      
+      setTodaysMeals(todaysData.meals || { breakfast: [], lunch: [], dinner: [], snack: [] });
+      setAyurvedaGuidelines(guidelinesData || []);
+      setWeeklyCounts(weeklyCountsData || []);
+      setMoodCorrelations(correlationsData.correlations || []);
+      setMoodInsights(insightsData || { insights: [], top_positive_foods: [], foods_to_moderate: [], recommendations: [] });
+      setDailyAnalysis(dailyAnalysisData || null);
+
+      // Reset form
+      setNewMealText('');
+      setNewMealNotes('');
+      
+      setTimeout(() => setMealSuccess(null), 5000);
     } catch (error: any) {
       console.error('Failed to log meal:', error);
-      setMealError(error.response?.data?.detail || 'Failed to log meal');
+      const errorMsg = error.response?.data?.detail || error.message || 'Failed to log meal';
+      setMealError(errorMsg);
     } finally {
       setSavingMeal(false);
     }
@@ -481,60 +484,7 @@ export function DietMoodPage({ user, onNavigate, onLogout, onOpenNotifications }
             </CardContent>
           </Card>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-            {/* Mood Insights */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <TrendingUp className="w-5 h-5" />
-                  Mood Insights
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {moodInsights.insights.length > 0 ? (
-                    <>
-                      {moodInsights.insights.map((insight, index) => (
-                        <div key={index} className="p-3 bg-blue-50 border border-blue-200 rounded-md">
-                          <p className="text-sm text-blue-700">{insight}</p>
-                        </div>
-                      ))}
-                      
-                      {moodInsights.top_positive_foods.length > 0 && (
-                        <div>
-                          <h4 className="font-medium text-green-700 mb-2">Foods that boost your mood:</h4>
-                          <div className="flex flex-wrap gap-2">
-                            {moodInsights.top_positive_foods.slice(0, 5).map((food: any, index: number) => (
-                              <Badge key={index} variant="secondary" className="bg-green-100 text-green-800">
-                                {food.ingredient_name}
-                              </Badge>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      
-                      {moodInsights.foods_to_moderate.length > 0 && (
-                        <div>
-                          <h4 className="font-medium text-orange-700 mb-2">Foods to moderate:</h4>
-                          <div className="flex flex-wrap gap-2">
-                            {moodInsights.foods_to_moderate.slice(0, 5).map((food: any, index: number) => (
-                              <Badge key={index} variant="secondary" className="bg-orange-100 text-orange-800">
-                                {food.ingredient_name}
-                              </Badge>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <p className="text-gray-500 text-center py-4">
-                      Keep logging meals and emotions to see personalized insights!
-                    </p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
+          <div className="mb-8">
             {/* Ayurveda Guidelines */}
             <Card>
               <CardHeader>
@@ -545,10 +495,11 @@ export function DietMoodPage({ user, onNavigate, onLogout, onOpenNotifications }
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {/* Latest Meal Analysis - Simplified */}
+                  <h3 className="font-bold text-xl text-purple-900 mb-4">Personalized Analysis</h3>
+                  
+                  {/* Latest Meal Analysis */}
                   {mealAnalysis && (
                     <div className="space-y-3 mb-6 pb-6 border-b-2 border-purple-200">
-                      <h3 className="font-bold text-xl text-purple-900 mb-3">Latest Meal Analysis</h3>
                       
                       {/* Show Logged Meal Info */}
                       {mealAnalysis.meal && (
@@ -731,10 +682,8 @@ export function DietMoodPage({ user, onNavigate, onLogout, onOpenNotifications }
                     </div>
                   )}
 
-                  {/* Today's Personalized Guidelines */}
+                  {/* Daily Analysis */}
                   <div>
-                    <h3 className="font-bold text-lg text-purple-900 mb-3">Today's Personalized Guidelines</h3>
-                    
                     {dailyAnalysis && dailyAnalysis.has_meals ? (
                       <div className="space-y-3">
                         {/* Dosha Impact Summary */}

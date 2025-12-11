@@ -36,8 +36,8 @@ class WearableService:
             supabase = get_supabase(use_service_role=True)
             
             # Prepare snapshot data
-            # Use source from data if provided, otherwise use parameter (default: "manual")
-            data_source = data.get("source", source)
+            # Always use the source parameter (it takes priority over data['source'])
+            data_source = source
             
             snapshot = {
                 "user_id": user_id,
@@ -54,17 +54,21 @@ class WearableService:
             # Remove None values
             snapshot = {k: v for k, v in snapshot.items() if v is not None}
             
-            logger.info(f"💾 Saving manual entry for user {user_id} on {data.get('date')}")
+            logger.info(f"💾 Attempting to save entry for user={user_id}, date={data.get('date')}, source={data_source}")
+            logger.info(f"📊 Snapshot to save: {snapshot}")
             
             # Upsert (insert or update if exists)
             result = supabase.table("wearable_snapshots")\
                 .upsert(snapshot, on_conflict="user_id,date,source")\
                 .execute()
             
+            logger.info(f"📤 Database response: {result}")
+            
             if result.data:
-                logger.info(f"✅ Saved wearable data for {data.get('date')}")
+                logger.info(f"✅ Successfully saved wearable data: {result.data[0]}")
                 return result.data[0]
             else:
+                logger.error(f"❌ No data returned from upsert. Full result: {result}")
                 raise Exception("No data returned from insert")
                 
         except Exception as e:
@@ -288,8 +292,9 @@ class WearableService:
                     
                     # Convert to date object for storage
                     target_date = date.fromisoformat(latest.get("date", date.today().isoformat()))
+                    data_source = latest.get("source", "manual")  # Get source from data (manual or watch)
                     
-                    logger.info(f"[DEVICE_RECS] Attempting to store {len(recommendations[:10])} device recommendations for {target_date}")
+                    logger.info(f"[DEVICE_RECS] Attempting to store {len(recommendations[:10])} device recommendations from {data_source} for {target_date}")
                     
                     # Store recommendations synchronously using threading to avoid async issues
                     def store_device_recs():
@@ -301,11 +306,12 @@ class WearableService:
                                 recommendation_service.save_device_recommendations(
                                     user_id=user_id,
                                     target_date=target_date,
-                                    device_recs=recommendations[:10]  # Top 10
+                                    device_recs=recommendations[:10],  # Top 10
+                                    source_type=data_source  # Pass source (manual or watch)
                                 )
                             )
                             loop.close()
-                            logger.info(f"[DEVICE_RECS] ✅ Successfully stored {len(result)} device recommendations for user {user_id}")
+                            logger.info(f"[DEVICE_RECS] ✅ Successfully stored {len(result)} device recommendations from {data_source} for user {user_id}")
                         except Exception as e:
                             logger.error(f"[DEVICE_RECS] ❌ Failed to store device recommendations: {e}", exc_info=True)
                     

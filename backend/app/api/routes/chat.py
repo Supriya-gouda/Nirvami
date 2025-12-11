@@ -6,6 +6,7 @@ from app.utils.database import get_supabase
 from app.services.gemini_chatbot import get_chatbot
 from app.services.crisis_detector import CrisisDetector
 from app.services.emotion_service import get_emotion_service
+from app.services.alert_service import AlertService
 from datetime import datetime
 from typing import List
 import logging
@@ -299,6 +300,21 @@ async def send_message(
                     "created_at": datetime.utcnow().isoformat()
                 }
                 supabase.table("alerts").insert(alert_data).execute()
+                
+                # Create in-app notification
+                try:
+                    await AlertService.create_in_app_notification(
+                        supabase=supabase,
+                        user_id=current_user_id,
+                        title="🚨 Crisis Alert - Immediate Support Needed",
+                        body="We detected you might be in distress. If this is an emergency, please contact emergency services or your mental health professional immediately.\n\nNational Suicide Prevention Lifeline: 988 (US)\nCrisis Text Line: Text HOME to 741741",
+                        notification_type="crisis",
+                        action_url="/chatbot"
+                    )
+                    logger.info(f"✅ Created crisis notification for user {current_user_id}")
+                except Exception as notif_err:
+                    logger.error(f"Failed to create crisis notification: {notif_err}")
+                    
             except Exception as alert_err:
                 logger.error(f"Failed to save crisis alert: {alert_err}")
             

@@ -58,6 +58,9 @@ export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications, onR
   
   // Dynamic aura from latest emotion
   const [dynamicAura, setDynamicAura] = useState<any>(null);
+  
+  // Today's Analysis - Device & Manual recommendations
+  const [todayAnalysis, setTodayAnalysis] = useState<any>({ device: [], manual: [] });
 
   // Local State
   const [streak, setStreak] = useState<number>(0);
@@ -75,7 +78,7 @@ export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications, onR
         setLoading(true);
 
         // Fetch all data in parallel including dynamic aura from latest emotion
-        const [wellness, aura, dosha, emotions, streakData, wearable, latestAura] = await Promise.all([
+        const [wellness, aura, dosha, emotions, streakData, wearable, latestAura, analysisRecs] = await Promise.all([
           api.getTodayWellness().catch(() => null),
           api.getTodayAura().catch(() => null),
           api.getLatestDosha().catch(() => null),
@@ -89,6 +92,7 @@ export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications, onR
             return { hasData: false, steps: 0, sleepHours: 0, heartRate: 0, stressLevel: 0 };
           }),
           api.getAuraFromLatestEmotion().catch(() => null), // Get latest emotion and map to aura therapy color
+          api.getRecommendationsGroupedBySource().catch(() => ({ device: [], chat: [], system: [] })), // Get today's analysis
         ]);
 
         setWellnessData(wellness);
@@ -99,6 +103,16 @@ export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications, onR
         setStreak(streakData?.current_streak || 0);
         setLongestStreak(streakData?.longest_streak || 0);
         setDynamicAura(latestAura); // Apply dynamic aura gradient and text based on backend response
+        
+        // Separate device recommendations by data source (manual vs watch)
+        const deviceRecs = analysisRecs?.device || [];
+        const watchRecs = deviceRecs.filter((rec: any) => rec.meta?.data_source === 'watch');
+        const manualRecs = deviceRecs.filter((rec: any) => rec.meta?.data_source === 'manual');
+        
+        setTodayAnalysis({
+          device: watchRecs,
+          manual: manualRecs
+        });
         
         // Get latest emotion
         if (emotions && emotions.length > 0) {
@@ -674,6 +688,131 @@ export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications, onR
             )}
           </div>
         </motion.div>
+
+        {/* Today's Analysis Section */}
+        {todayAnalysis && (todayAnalysis.device.length > 0 || todayAnalysis.manual.length > 0) && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.25 }}
+            className="mb-6"
+          >
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
+                  <Activity className="w-6 h-6 text-purple-600" />
+                  Today's Health Analysis
+                </h2>
+                <Badge variant="outline" className="text-xs">
+                  {todayAnalysis.device.length + todayAnalysis.manual.length} insights
+                </Badge>
+              </div>
+
+              {/* Watch/Device Analysis */}
+              {todayAnalysis.device.length > 0 && (
+                <div className="space-y-3 mb-4">
+                  <div className="flex items-center gap-2">
+                    <Badge className="bg-blue-100 text-blue-800 border-blue-200">
+                      ⌚ Watch Data
+                    </Badge>
+                    <span className="text-xs text-gray-500">
+                      {todayAnalysis.device.length} insights
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    {todayAnalysis.device.slice(0, 5).map((rec: any, idx: number) => (
+                      <motion.div
+                        key={rec.id || `device-${idx}`}
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: idx * 0.05 }}
+                        className="flex items-start gap-3 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-lg p-3 border border-blue-100"
+                      >
+                        <span className="text-lg flex-shrink-0">
+                          {rec.content.includes('CRITICAL') || rec.content.includes('🚨') ? '🚨' :
+                           rec.content.includes('high') || rec.content.includes('⚠️') ? '⚠️' :
+                           rec.content.includes('sleep') || rec.content.includes('😴') ? '😴' :
+                           rec.content.includes('heart') || rec.content.includes('❤️') ? '❤️' :
+                           rec.content.includes('stress') || rec.content.includes('😰') ? '😰' :
+                           rec.content.includes('activity') || rec.content.includes('🚶') ? '🚶' : '✨'}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-gray-800 leading-relaxed">{rec.content}</p>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Manual Entry Analysis */}
+              {todayAnalysis.manual.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Badge className="bg-purple-100 text-purple-800 border-purple-200">
+                      ✍️ Manual Entry
+                    </Badge>
+                    <span className="text-xs text-gray-500">
+                      {todayAnalysis.manual.length} insights
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    {todayAnalysis.manual.slice(0, 5).map((rec: any, idx: number) => (
+                      <motion.div
+                        key={rec.id || `manual-${idx}`}
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: idx * 0.05 }}
+                        className="flex items-start gap-3 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg p-3 border border-purple-100"
+                      >
+                        <span className="text-lg flex-shrink-0">
+                          {rec.content.includes('CRITICAL') || rec.content.includes('🚨') ? '🚨' :
+                           rec.content.includes('high') || rec.content.includes('⚠️') ? '⚠️' :
+                           rec.content.includes('sleep') || rec.content.includes('😴') ? '😴' :
+                           rec.content.includes('heart') || rec.content.includes('❤️') ? '❤️' :
+                           rec.content.includes('stress') || rec.content.includes('😰') ? '😰' :
+                           rec.content.includes('activity') || rec.content.includes('🚶') ? '🚶' : '✨'}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-gray-800 leading-relaxed">{rec.content}</p>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* View All Button */}
+              {(todayAnalysis.device.length > 5 || todayAnalysis.manual.length > 5) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onNavigate('device')}
+                  className="w-full mt-4 text-purple-600 hover:text-purple-700"
+                >
+                  View All {todayAnalysis.device.length + todayAnalysis.manual.length} Insights →
+                </Button>
+              )}
+
+              {/* Empty State */}
+              {todayAnalysis.device.length === 0 && todayAnalysis.manual.length === 0 && (
+                <div className="text-center py-8">
+                  <Activity className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-600 mb-2">No analysis available yet</p>
+                  <p className="text-sm text-gray-500 mb-4">
+                    Add health data and run analysis to see insights
+                  </p>
+                  <Button
+                    variant="outline"
+                    onClick={() => onNavigate('device')}
+                  >
+                    Go to Device Page
+                  </Button>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
 
         {/* Aura Visualization Section */}
         <motion.div

@@ -90,7 +90,8 @@ export function NotificationCenter({ user, onClose }: NotificationCenterProps) {
       medium: 'bg-yellow-100 text-yellow-800 border-yellow-200',
       warning: 'bg-yellow-100 text-yellow-800 border-yellow-200',
       high: 'bg-red-100 text-red-800 border-red-200',
-      error: 'bg-red-100 text-red-800 border-red-200'
+      error: 'bg-red-100 text-red-800 border-red-200',
+      crisis: 'bg-red-200 text-red-900 border-red-400 animate-pulse'
     };
     return colors[severity as keyof typeof colors] || colors.low;
   };
@@ -103,7 +104,8 @@ export function NotificationCenter({ user, onClose }: NotificationCenterProps) {
       medium: <AlertTriangle className="w-5 h-5" />,
       warning: <AlertTriangle className="w-5 h-5" />,
       high: <AlertTriangle className="w-5 h-5" />,
-      error: <AlertTriangle className="w-5 h-5" />
+      error: <AlertTriangle className="w-5 h-5" />,
+      crisis: <AlertTriangle className="w-6 h-6 animate-pulse" />
     };
     return icons[severity as keyof typeof icons] || icons.low;
   };
@@ -111,12 +113,17 @@ export function NotificationCenter({ user, onClose }: NotificationCenterProps) {
   const getAlertTypeLabel = (item: any) => {
     // Handle both alert_type and notification title
     if (item.title && !item.alert_type) {
+      // Check if it's a crisis notification by type
+      if (item.type === 'crisis') {
+        return '🚨 CRISIS ALERT';
+      }
       return 'Health Alert'; // For notifications
     }
     
     const type = item.alert_type || 'notification';
     const labels = {
-      crisis_detected: 'Crisis Alert',
+      crisis: '🚨 CRISIS ALERT',
+      crisis_detected: '🚨 CRISIS ALERT',
       high_stress: 'High Stress',
       low_mood: 'Low Mood',
       irregular_pattern: 'Irregular Pattern',

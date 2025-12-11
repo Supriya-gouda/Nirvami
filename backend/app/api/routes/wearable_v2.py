@@ -133,9 +133,17 @@ async def analyze_health(
         notification_title = f"{risk_emoji.get(analysis['risk_level'], '📊')} Health Analysis Alert"
         notification_body = f"{len(analysis['risks'])} health concern(s) detected:\n\n" + "\n".join(analysis['risks'][:3])
         
-        # Create notification using AlertService
+        # Create notification using AlertService with proper severity
         try:
-            notification_type = "warning" if analysis['risk_level'] in ["high", "critical"] else "info"
+            # Map risk level to notification type
+            notification_type_map = {
+                "critical": "crisis",
+                "high": "warning",
+                "medium": "warning",
+                "low": "info"
+            }
+            notification_type = notification_type_map.get(analysis['risk_level'], "info")
+            
             await AlertService.create_in_app_notification(
                 supabase=supabase,
                 user_id=current_user_id,
@@ -144,7 +152,7 @@ async def analyze_health(
                 notification_type=notification_type,
                 action_url="/device"
             )
-            logger.info(f"✅ Created in-app notification for user {current_user_id}")
+            logger.info(f"✅ Created {notification_type} notification for user {current_user_id}")
             
         except Exception as notif_error:
             logger.error(f"Failed to create notification: {notif_error}")
@@ -243,32 +251,83 @@ async def upload_xml_and_analyze(
         
         logger.info(f"✅ Extracted {len(daily_snapshots)} daily snapshots from {stats['total_records']} raw records")
         
-        # Save ALL daily snapshots to database (same as manual entry)
-        saved_count = 0
-        failed_count = 0
+        # Calculate averages across all daily snapshots
+        total_sleep = 0
+        total_heart_rate = 0
+        total_steps = 0
+        total_calories = 0
+        total_hrv = 0
+        total_stress = 0
+        
+        count_sleep = 0
+        count_heart_rate = 0
+        count_steps = 0
+        count_calories = 0
+        count_hrv = 0
+        count_stress = 0
         
         for snapshot in daily_snapshots:
-            try:
-                # Add user_id
-                snapshot["user_id"] = current_user_id
-                
-                # Save using the SAME method as manual entry, but with 'watch' source
-                WearableService.save_manual_entry(
-                    user_id=current_user_id,
-                    data=snapshot,
-                    source="watch"  # Override source to 'watch' for XML uploads
-                )
-                saved_count += 1
-                
-            except Exception as save_error:
-                logger.error(f"Failed to save snapshot for {snapshot['date']}: {save_error}")
-                failed_count += 1
+            if snapshot.get("sleep_hours"):
+                total_sleep += snapshot["sleep_hours"]
+                count_sleep += 1
+            if snapshot.get("avg_heart_rate"):
+                total_heart_rate += snapshot["avg_heart_rate"]
+                count_heart_rate += 1
+            if snapshot.get("steps"):
+                total_steps += snapshot["steps"]
+                count_steps += 1
+            if snapshot.get("calories_burned"):
+                total_calories += snapshot["calories_burned"]
+                count_calories += 1
+            if snapshot.get("hrv_ms"):
+                total_hrv += snapshot["hrv_ms"]
+                count_hrv += 1
+            if snapshot.get("stress_level"):
+                total_stress += snapshot["stress_level"]
+                count_stress += 1
         
-        logger.info(f"💾 Saved {saved_count}/{len(daily_snapshots)} snapshots to database")
+        # Create averaged snapshot
+        from datetime import date as date_type
+        averaged_snapshot = {
+            "date": date_type.today().isoformat(),
+            "sleep_hours": round(total_sleep / count_sleep, 1) if count_sleep > 0 else None,
+            "avg_heart_rate": int(total_heart_rate / count_heart_rate) if count_heart_rate > 0 else None,
+            "steps": int(total_steps / count_steps) if count_steps > 0 else None,
+            "calories_burned": int(total_calories / count_calories) if count_calories > 0 else None,
+            "hrv_ms": int(total_hrv / count_hrv) if count_hrv > 0 else None,
+            "stress_level": int(total_stress / count_stress) if count_stress > 0 else None
+        }
         
-        # Run the SAME analysis as the manual "Analyze" button
-        logger.info("🔍 Running health analysis on latest data...")
+        logger.info(f"📊 Calculated averages: {averaged_snapshot}")
+        
+        # Save the averaged snapshot with source='watch'
+        try:
+            logger.info(f"💾 About to save averaged snapshot: {averaged_snapshot}")
+            
+            saved_data = WearableService.save_manual_entry(
+                user_id=current_user_id,
+                data=averaged_snapshot,
+                source="watch"
+            )
+            logger.info(f"✅ Saved averaged watch data to database: {saved_data}")
+            
+            # Verify the saved data has correct source
+            if saved_data and saved_data.get("source") == "watch":
+                logger.info(f"✅ VERIFIED: Data saved with source='watch' - {saved_data}")
+            else:
+                logger.warning(f"⚠️ Saved data may not have correct source: {saved_data}")
+                
+        except Exception as save_error:
+            logger.error(f"❌ Failed to save averaged snapshot: {save_error}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Failed to save data: {str(save_error)}")
+        
+        saved_count = 1  # One averaged entry saved
+        failed_count = 0
+        
+        # Run the SAME analysis as the manual "Analyze" button on the averaged data
+        logger.info("🔍 Running health analysis on averaged watch data...")
         analysis = WearableService.analyze_health_risks(current_user_id)
+        logger.info(f"📊 Analysis result: risk_level={analysis.get('risk_level')}, has_risks={analysis.get('has_risks')}, risks_count={len(analysis.get('risks', []))}")
         
         # Create notification if risks found (same as analyze endpoint)
         supabase = get_supabase(use_service_role=True)
@@ -285,7 +344,15 @@ async def upload_xml_and_analyze(
             notification_body = f"{len(analysis['risks'])} health concern(s) detected from Apple Watch data:\n\n" + "\n".join(analysis['risks'][:3])
             
             try:
-                notification_type = "warning" if analysis['risk_level'] in ["high", "critical"] else "info"
+                # Map risk level to notification type with proper severity
+                notification_type_map = {
+                    "critical": "crisis",
+                    "high": "warning",
+                    "medium": "warning",
+                    "low": "info"
+                }
+                notification_type = notification_type_map.get(analysis['risk_level'], "info")
+                
                 await AlertService.create_in_app_notification(
                     supabase=supabase,
                     user_id=current_user_id,
@@ -294,7 +361,7 @@ async def upload_xml_and_analyze(
                     notification_type=notification_type,
                     action_url="/device"
                 )
-                logger.info(f"✅ Created in-app notification")
+                logger.info(f"✅ Created {notification_type} in-app notification")
             except Exception as notif_error:
                 logger.error(f"Failed to create notification: {notif_error}")
         
@@ -325,26 +392,24 @@ async def upload_xml_and_analyze(
         except Exception as sms_error:
             logger.error(f"Failed to send SMS notification: {sms_error}", exc_info=True)
         
-        # Get latest snapshot for display
-        latest_snapshot = daily_snapshots[-1] if daily_snapshots else {}
-        
         return {
             "success": True,
-            "message": f"✅ Successfully uploaded and analyzed Apple Watch data! Processed {saved_count} days of health data.",
+            "message": f"✅ Successfully uploaded and analyzed Apple Watch data! Processed {len(daily_snapshots)} days into averaged health metrics.",
             "records_parsed": stats["total_records"],
-            "days_processed": saved_count,
+            "days_processed": len(daily_snapshots),
             "snapshots_created": saved_count,
             "snapshots_failed": failed_count,
-            "latest_metrics": {
-                "avg_heart_rate": latest_snapshot.get("avg_heart_rate"),
-                "steps": latest_snapshot.get("steps"),
-                "sleep_hours": latest_snapshot.get("sleep_hours"),
-                "calories_burned": latest_snapshot.get("calories_burned"),
-                "hrv_ms": latest_snapshot.get("hrv_ms"),
-                "stress_level": latest_snapshot.get("stress_level")
+            "averaged_metrics": {
+                "avg_heart_rate": averaged_snapshot.get("avg_heart_rate"),
+                "steps": averaged_snapshot.get("steps"),
+                "sleep_hours": averaged_snapshot.get("sleep_hours"),
+                "calories_burned": averaged_snapshot.get("calories_burned"),
+                "hrv_ms": averaged_snapshot.get("hrv_ms"),
+                "stress_level": averaged_snapshot.get("stress_level")
             },
             "stats": stats,
             "analysis": analysis,
+            "data_source": "watch",
             "date_range": {
                 "start": daily_snapshots[0]["date"] if daily_snapshots else None,
                 "end": daily_snapshots[-1]["date"] if daily_snapshots else None

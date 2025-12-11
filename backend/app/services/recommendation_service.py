@@ -131,7 +131,8 @@ class RecommendationService:
         self, 
         user_id: str, 
         target_date: date, 
-        device_recs: List[str]
+        device_recs: List[str],
+        source_type: str = "manual"
     ) -> List[Recommendation]:
         """
         Save device-generated recommendations to recommendations table
@@ -140,6 +141,7 @@ class RecommendationService:
             user_id: User ID
             target_date: Date for the recommendations
             device_recs: List of recommendation strings from device analysis
+            source_type: Source type - "manual" or "watch" (default: "manual")
         
         Returns:
             List of stored recommendations
@@ -161,7 +163,10 @@ class RecommendationService:
                         category=category,
                         title=title,
                         content=rec_text.strip(),
-                        meta={"extracted_from": "device_analysis"}
+                        meta={
+                            "extracted_from": "device_analysis",
+                            "data_source": source_type  # Track if from manual entry or watch
+                        }
                     )
                     
                     stored_rec = await self._store_recommendation(rec_create)
@@ -172,7 +177,7 @@ class RecommendationService:
                     logger.warning(f"Error storing device recommendation '{rec_text}': {e}")
                     continue
             
-            logger.info(f"Stored {len(recommendations)} device recommendations for user {user_id} on {target_date}")
+            logger.info(f"Stored {len(recommendations)} device recommendations from {source_type} for user {user_id} on {target_date}")
             return recommendations
             
         except Exception as e:

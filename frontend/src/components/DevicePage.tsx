@@ -13,7 +13,9 @@ import {
   Plus,
   AlertCircle,
   Check,
-  Upload
+  Upload,
+  AlertTriangle,
+  PhoneCall
 } from 'lucide-react';
 import { Navigation } from './Navigation';
 import { Button } from './ui/button';
@@ -22,6 +24,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Alert, AlertDescription } from './ui/alert';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
 import { toast } from 'sonner';
 import { ManualHealthEntry } from './ManualHealthEntry';
 import { WatchDataUpload } from './WatchDataUpload';
@@ -46,6 +49,10 @@ export function DevicePage({ user, onNavigate, onLogout, onOpenNotifications }: 
   const [history, setHistory] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
+  // Health alert popup state
+  const [showHealthAlert, setShowHealthAlert] = useState(false);
+  const [healthAlertData, setHealthAlertData] = useState<any>(null);
+
   // Ayurveda recommendations
   const [recommendations, setRecommendations] = useState<any>(null);
   const [generatingRecs, setGeneratingRecs] = useState(false);
@@ -66,6 +73,7 @@ export function DevicePage({ user, onNavigate, onLogout, onOpenNotifications }: 
       if (latest && latest.hasData) {
         setWearableSummary(latest);
         setLatestData(latest.data);
+        console.log('Latest wearable data:', latest.data);
         
         // Auto-fetch analysis if data exists
         await fetchLatestAnalysis();
@@ -87,8 +95,24 @@ export function DevicePage({ user, onNavigate, onLogout, onOpenNotifications }: 
     try {
       // Silently fetch latest analysis without showing loading state
       const result = await api.analyzeWearableHealth();
+      console.log('Analysis result fetched:', result);
       if (result?.analysis) {
+        console.log('Setting analysis result:', result.analysis);
         setAnalysisResult(result.analysis);
+        // Check for critical or high risks and show alert
+        if (result.analysis.has_risks && ['critical', 'high'].includes(result.analysis.risk_level)) {
+          setHealthAlertData(result.analysis);
+          setShowHealthAlert(true);
+        }
+      } else if (result && !result.analysis) {
+        // If result exists but no analysis property, the result itself might be the analysis
+        console.log('Result is the analysis:', result);
+        setAnalysisResult(result);
+        // Check for critical or high risks and show alert
+        if (result.has_risks && ['critical', 'high'].includes(result.risk_level)) {
+          setHealthAlertData(result);
+          setShowHealthAlert(true);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch analysis:', error);
@@ -117,13 +141,28 @@ export function DevicePage({ user, onNavigate, onLogout, onOpenNotifications }: 
       setAnalyzing(true);
       setAnalysisResult(null);
       
+      // First, refresh latest data to get the correct source
+      await fetchLatestData();
+      
+      // Then analyze
       const result = await api.analyzeWearableHealth();
+      console.log('Analysis result:', result);
       setAnalysisResult(result.analysis);
       
+      // Get the source from latest data
+      const dataSource = wearableSummary?.data?.source || 'manual';
+      console.log('Data source for analysis:', dataSource);
+      
       if (result.analysis.has_risks) {
-        toast.warning(`${result.analysis.risks.length} health concern(s) detected. Check notifications.`);
+        // Show popup alert for critical/high risks
+        if (['critical', 'high'].includes(result.analysis.risk_level)) {
+          setHealthAlertData(result.analysis);
+          setShowHealthAlert(true);
+        } else {
+          toast.warning(`${result.analysis.risks.length} health concern(s) detected from ${dataSource} data.`);
+        }
       } else {
-        toast.success('No health risks detected! Keep up the good work!');
+        toast.success(`No health risks detected from ${dataSource} data! Keep up the good work!`);
       }
     } catch (error) {
       console.error('Failed to analyze health data:', error);
@@ -277,7 +316,26 @@ export function DevicePage({ user, onNavigate, onLogout, onOpenNotifications }: 
               <CardContent>
                 <div className="space-y-4">
                   {/* XML Upload Component */}
-                  <WatchDataUpload onSuccess={fetchLatestData} />
+                  <WatchDataUpload onSuccess={async (response) => {
+                    console.log('XML upload complete - refreshing data, history, and analysis');
+                    console.log('Upload response:', response);
+                    
+                    // Refresh latest data and history
+                    await fetchLatestData();
+                    await fetchHistory();
+                    
+                    // Set analysis from upload response if available
+                    if (response?.analysis) {
+                      console.log('Setting analysis from upload response:', response.analysis);
+                      setAnalysisResult(response.analysis);
+                      
+                      // Show alert if critical/high risks
+                      if (response.analysis.has_risks && ['critical', 'high'].includes(response.analysis.risk_level)) {
+                        setHealthAlertData(response.analysis);
+                        setShowHealthAlert(true);
+                      }
+                    }
+                  }} />
                 </div>
               </CardContent>
             </Card>
@@ -350,11 +408,11 @@ export function DevicePage({ user, onNavigate, onLogout, onOpenNotifications }: 
                   ) : (
                     <ManualHealthEntry
                       onSuccess={() => {
-                        console.log('Manual entry success callback');
+                        console.log('Manual entry success callback - refreshing data');
                         setShowManualInput(false);
+                        // Refresh data to show the new entry
                         fetchLatestData();
                         fetchHistory();
-                        toast.success('Health data saved successfully!');
                       }}
                       onCancel={() => {
                         console.log('Manual entry cancelled');
@@ -434,11 +492,23 @@ export function DevicePage({ user, onNavigate, onLogout, onOpenNotifications }: 
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Brain className="w-6 h-6 text-purple-600" />
-                      <CardTitle>Your Health Analysis</CardTitle>
+                      <CardTitle>
+                        Your Health Analysis
+                        {wearableSummary?.data?.source === 'watch' && (
+                          <span className="text-base font-normal text-blue-600"> - Watch Data</span>
+                        )}
+                        {wearableSummary?.data?.source === 'manual' && (
+                          <span className="text-base font-normal text-purple-600"> - Manual Entry</span>
+                        )}
+                      </CardTitle>
                     </div>
                     {wearableSummary?.data && (
-                      <span className="text-xs px-3 py-1 bg-purple-50 text-purple-700 rounded-full">
-                        {wearableSummary.data.source === 'watch' ? '⌚ Apple Watch' : '✍️ Manual Entry'}
+                      <span className={`text-xs px-3 py-1 rounded-full font-semibold ${
+                        wearableSummary.data.source === 'watch' 
+                          ? 'bg-blue-100 text-blue-700 border border-blue-200' 
+                          : 'bg-purple-100 text-purple-700 border border-purple-200'
+                      }`}>
+                        {wearableSummary.data.source === 'watch' ? '⌚ Watch' : '✍️ Manual'}
                       </span>
                     )}
                   </div>
@@ -783,6 +853,67 @@ export function DevicePage({ user, onNavigate, onLogout, onOpenNotifications }: 
           </motion.div>
         )}
       </div>
+
+      {/* Critical Health Alert Dialog - Horizontal Layout */}
+      <Dialog open={showHealthAlert} onOpenChange={setShowHealthAlert}>
+        <DialogContent className={`max-w-5xl ${healthAlertData?.risk_level === 'critical' ? 'border-4 border-red-500' : 'border-4 border-orange-500'}`}>
+          <DialogHeader>
+            <DialogTitle className={`flex items-center gap-3 text-xl ${healthAlertData?.risk_level === 'critical' ? 'text-red-600' : 'text-orange-600'}`}>
+              <AlertTriangle className={`w-8 h-8 ${healthAlertData?.risk_level === 'critical' ? 'animate-pulse' : ''}`} />
+              {healthAlertData?.risk_level === 'critical' ? '⚠️ CRITICAL HEALTH ALERT' : '⚠️ Health Concerns Detected'}
+              <div className={`ml-auto inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
+                healthAlertData?.risk_level === 'critical' 
+                  ? 'bg-red-100 text-red-800' 
+                  : 'bg-orange-100 text-orange-800'
+              }`}>
+                {healthAlertData?.risk_level?.toUpperCase()}
+              </div>
+            </DialogTitle>
+            <DialogDescription className="text-sm text-gray-700">
+              {healthAlertData?.risk_level === 'critical' 
+                ? 'Critical health concerns detected - immediate attention required'
+                : 'Health concerns detected that need your attention'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-3">
+            {/* Health Concerns - Full Width */}
+            <div className="space-y-2">
+              <h3 className="font-semibold text-base text-gray-800 flex items-center gap-2">
+                <AlertCircle className="w-5 h-5" />
+                Health Concerns Detected
+              </h3>
+              <ul className="space-y-2 bg-gray-50 rounded-lg p-4 max-h-60 overflow-y-auto">
+                {healthAlertData?.risks?.map((risk: string, index: number) => (
+                  <li key={index} className="flex items-start gap-3 text-gray-800">
+                    <span className={`mt-0.5 text-base ${healthAlertData?.risk_level === 'critical' ? 'text-red-500' : 'text-orange-500'}`}>•</span>
+                    <span className="text-sm leading-relaxed">{risk}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-3 border-t">
+            <Button
+              onClick={() => setShowHealthAlert(false)}
+              className="flex-1"
+              variant="outline"
+            >
+              I Understand
+            </Button>
+            <Button
+              onClick={() => {
+                setShowHealthAlert(false);
+                onOpenNotifications?.();
+              }}
+              className={healthAlertData?.risk_level === 'critical' ? 'flex-1 bg-red-600 hover:bg-red-700' : 'flex-1 bg-orange-600 hover:bg-orange-700'}
+            >
+              View Notifications
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -44,8 +44,16 @@ export function ManualHealthEntry({ onSuccess, onCancel }: ManualHealthEntryProp
         calories_burned: formData.calories_burned ? parseFloat(formData.calories_burned) : undefined
       };
 
-      await api.submitManualHealthEntry(payload);
-      toast.success('Health data saved successfully!');
+      console.log('Submitting manual health entry:', payload);
+      const response = await api.submitManualHealthEntry(payload);
+      console.log('Manual health entry response:', response);
+      
+      // Check if response indicates success
+      if (response && (response.success || response.data)) {
+        toast.success('Health data saved successfully!');
+      } else {
+        throw new Error('Invalid response from server');
+      }
       
       // Reset form
       setFormData({
@@ -60,9 +68,10 @@ export function ManualHealthEntry({ onSuccess, onCancel }: ManualHealthEntryProp
       if (onSuccess) {
         onSuccess();
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error submitting health data:', error);
-      toast.error('Failed to save health data');
+      const errorMsg = error.response?.data?.detail || error.message || 'Failed to save health data';
+      toast.error(errorMsg);
     } finally {
       setLoading(false);
     }
