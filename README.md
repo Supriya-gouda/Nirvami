@@ -114,5 +114,19 @@ Built with: Google Gemini AI • Supabase • Twilio • Hugging Face • Ayurve
 
 ---
 
+<<<<<<< HEAD
 **Repository**: [github.com/Supriya-gouda/Nirvami](https://github.com/Supriya-gouda/Nirvami)  
 **Version**: 1.0.0 (December 2024)
+=======
+<div align="center">
+
+**Built with ❤️ for mental wellness**
+
+*Empowering individuals through AI-driven holistic health solutions*
+
+Last Updated: December 8, 2024
+
+</div>
+- **Framer Motion**: Beautiful UI animations
+- **Open Source Community**: ML models and libraries
+>>>>>>> 8d6bf0a58d9b13bf19d2a5853b77dfea6be2a018
