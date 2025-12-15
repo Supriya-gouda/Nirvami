@@ -13,7 +13,8 @@ import {
   Heart,
   Coffee,
   Utensils,
-  Moon
+  Moon,
+  Play
 } from 'lucide-react';
 import { Navigation } from './Navigation';
 import { Button } from './ui/button';
@@ -30,13 +31,21 @@ interface AyurvedaRecommendationPageProps {
   onNavigate: (page: PageType) => void;
   onLogout?: () => void;
   onOpenNotifications?: () => void;
+  onOpenPractice?: (recommendation: {
+    id?: string;
+    title: string;
+    content: string;
+    category?: string;
+    source?: string;
+  }) => void;
 }
 
 export function AyurvedaRecommendationPage({
   user,
   onNavigate,
   onLogout,
-  onOpenNotifications
+  onOpenNotifications,
+  onOpenPractice
 }: AyurvedaRecommendationPageProps) {
   const [ayurvedaRecommendations, setAyurvedaRecommendations] = useState<Recommendation[]>([]);
   const [lifestyleRecommendations, setLifestyleRecommendations] = useState<Recommendation[]>([]);
@@ -234,7 +243,6 @@ export function AyurvedaRecommendationPage({
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="group"
     >
       <Card className={`hover:shadow-md transition-shadow duration-200 border-l-4 ${getCategoryColor(recommendation.category)}`}>
         <CardHeader className="pb-2">
@@ -263,9 +271,26 @@ export function AyurvedaRecommendationPage({
           </div>
         </CardHeader>
         <CardContent>
-          <p className="text-gray-700 leading-relaxed whitespace-pre-line">
+          <p className="text-gray-700 leading-relaxed whitespace-pre-line mb-4">
             {recommendation.content}
           </p>
+          {onOpenPractice && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onOpenPractice({
+                id: recommendation.id,
+                title: recommendation.title,
+                content: recommendation.content,
+                category: recommendation.category,
+                source: recommendation.source
+              })}
+              className="w-full bg-gradient-to-r from-green-500 to-emerald-500 text-white hover:from-green-600 hover:to-emerald-600 border-0"
+            >
+              <Play className="w-4 h-4 mr-2" />
+              Start Practice
+            </Button>
+          )}
         </CardContent>
       </Card>
     </motion.div>

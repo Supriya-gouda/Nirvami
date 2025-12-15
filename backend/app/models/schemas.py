@@ -451,3 +451,97 @@ class RecommendationsBySource(BaseModel):
     chat: List[Recommendation] = []
     device: List[Recommendation] = []
     system: List[Recommendation] = []
+
+# ============================================
+# PRACTICE SESSIONS
+# ============================================
+
+class PracticeType(str, Enum):
+    YOGA = "yoga"
+    BREATHING = "breathing"
+    MEDITATION = "meditation"
+    LIFESTYLE = "lifestyle"
+
+
+class PracticeDifficulty(str, Enum):
+    BEGINNER = "beginner"
+    INTERMEDIATE = "intermediate"
+    ADVANCED = "advanced"
+
+
+class PracticeContent(BaseModel):
+    """Practice content with instructions and media"""
+    id: Optional[str] = None
+    practice_type: str
+    practice_name: str
+    sanskrit_name: Optional[str] = None
+    description: str
+    benefits: List[str] = []
+    difficulty: str
+    duration_min: int
+    duration_max: int
+    youtube_video_id: Optional[str] = None
+    youtube_title: Optional[str] = None
+    avatar_animation_steps: Optional[Dict[str, Any]] = None
+    tts_instructions: List[str] = []
+    dosha_tags: List[str] = []
+    emotion_tags: List[str] = []
+    category: Optional[str] = None
+    icon: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class CreatePracticeSessionRequest(BaseModel):
+    """Request to create a new practice session"""
+    recommendation_id: Optional[str] = None
+    practice_type: str
+    practice_name: str
+    duration_minutes: int
+    completion_status: str = "completed"
+    notes: Optional[str] = None
+    difficulty_rating: Optional[int] = Field(None, ge=1, le=5)
+    satisfaction_rating: Optional[int] = Field(None, ge=1, le=5)
+
+
+class PracticeSession(BaseModel):
+    """Practice session completion record"""
+    id: str
+    user_id: str
+    recommendation_id: Optional[str] = None
+    practice_type: str
+    practice_name: str
+    duration_minutes: int
+    completed_at: datetime
+    completion_status: str
+    notes: Optional[str] = None
+    difficulty_rating: Optional[int] = None
+    satisfaction_rating: Optional[int] = None
+    created_at: datetime
+
+
+class PracticeStreak(BaseModel):
+    """User practice streak and statistics"""
+    id: str
+    user_id: str
+    current_streak: int
+    longest_streak: int
+    total_sessions: int
+    last_practice_date: Optional[date] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class PracticeStats(BaseModel):
+    """Practice statistics and analytics"""
+    total_practices: int
+    total_minutes: int
+    favorite_type: Optional[str] = None
+    practice_counts: Dict[str, int] = {}
+    recent_sessions: List[PracticeSession] = []
+
+
+class PracticeWellnessContribution(BaseModel):
+    """Wellness score contribution from practices"""
+    points: float
+    breakdown: Dict[str, float]

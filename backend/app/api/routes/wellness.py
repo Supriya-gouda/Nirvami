@@ -112,9 +112,22 @@ def calculate_wellness_score(user_id: str, target_date: date, supabase) -> Dict:
             .eq("target_date", target_date.isoformat())
             .execute()
         )
+        # Get practice sessions for today
+        practice_result = (
+            supabase.table("practice_sessions")
+            .select("id", "duration_minutes", "practice_type")
+            .eq("user_id", user_id)
+            .gte("completed_at", target_date.isoformat())
+            .lte("completed_at", (target_date + timedelta(days=1)).isoformat())
+            .execute()
+        )
+        
         journal_entries_count = len(journal_result.data) if journal_result.data else 0
         completed_goals_count = sum(1 for g in (goal_result.data or []) if g.get("is_completed"))
         total_goals_count = len(goal_result.data) if goal_result.data else 0
+        practice_sessions = practice_result.data or []
+        practice_count = len(practice_sessions)
+        
         journal_score = min(100, (journal_entries_count / 1.0) * 50)
         if journal_entries_count == 0:
             insights.append("No journal entries today.")
@@ -123,6 +136,7 @@ def calculate_wellness_score(user_id: str, target_date: date, supabase) -> Dict:
             insights.append("You made one journal entry today.")
         else:
             insights.append(f"You made {journal_entries_count} journal entries today - great for reflection!")
+        
         goal_score = 0
         if total_goals_count > 0:
             goal_score = (completed_goals_count / total_goals_count) * 100
@@ -136,7 +150,31 @@ def calculate_wellness_score(user_id: str, target_date: date, supabase) -> Dict:
         else:
             insights.append("No goals set for today.")
             recommendations.append("Set daily goals to boost productivity.")
-        engagement_score = (journal_score * 0.5) + (goal_score * 0.5)
+        
+        # Calculate practice score
+        practice_score = 0
+        if practice_count > 0:
+            # Base points: 2 per session
+            base_points = min(practice_count * 2, 10)  # Max 10 pts from sessions
+            
+            # Duration bonus: 1 point per 10 minutes, max 5 pts
+            total_duration = sum(p.get("duration_minutes", 0) for p in practice_sessions)
+            duration_bonus = min(total_duration / 10, 5)
+            
+            # Variety bonus: 1 point per unique practice type, max 5 pts
+            unique_types = len(set(p.get("practice_type", "") for p in practice_sessions))
+            variety_bonus = min(unique_types, 5)
+            
+            practice_score = min(base_points + duration_bonus + variety_bonus, 100)
+            
+            insights.append(f"You completed {practice_count} practice session(s) today!")
+            if total_duration >= 30:
+                insights.append(f"Great job practicing for {total_duration} minutes!")
+        else:
+            insights.append("No practice sessions today.")
+            recommendations.append("Try a guided yoga or meditation practice.")
+        
+        engagement_score = (journal_score * 0.3) + (goal_score * 0.3) + (practice_score * 0.4)
         overall_score = (emotion_score * 0.4) + (wearable_score * 0.3) + (engagement_score * 0.3)
         return {
             "user_id": user_id,

@@ -20,11 +20,12 @@ import { ProfilePage } from './components/ProfilePage';
 import { AccountSettingsPage } from './components/AccountSettingsPage';
 import { DailyRoutinesPage } from './components/DailyRoutinesPage';
 import { DinacharyaPage } from './components/DinacharyaPage';
+import { PracticeDetailPage } from './components/PracticeDetailPage';
 import { Toaster } from './components/ui/sonner';
 import { useAuth } from './contexts/AuthContext';
 import api from './services/api';
 
-export type PageType = 'landing' | 'signin' | 'signup' | 'dashboard' | 'chatbot' | 'conversation-history' | 'manual' | 'moodboard' | 'yoga-recommendations' | 'ayurveda-recommendations' | 'diet' | 'progress' | 'emotion-history' | 'aura' | 'device' | 'dosha' | 'profile' | 'settings' | 'routines' | 'dinacharya';
+export type PageType = 'landing' | 'signin' | 'signup' | 'dashboard' | 'chatbot' | 'conversation-history' | 'manual' | 'moodboard' | 'yoga-recommendations' | 'ayurveda-recommendations' | 'diet' | 'progress' | 'emotion-history' | 'aura' | 'device' | 'dosha' | 'profile' | 'settings' | 'routines' | 'dinacharya' | 'practice';
 
 function App() {
   const { user, isAuthenticated, isLoading, logout } = useAuth();
@@ -32,6 +33,14 @@ function App() {
   const [showMoodPopup, setShowMoodPopup] = useState(false);
   const [showNotificationCenter, setShowNotificationCenter] = useState(false);
   const [auraRefreshTrigger, setAuraRefreshTrigger] = useState(0);
+  const [previousPage, setPreviousPage] = useState<PageType>('dashboard');
+  const [selectedPractice, setSelectedPractice] = useState<{
+    id?: string;
+    title: string;
+    content: string;
+    category?: string;
+    source?: string;
+  } | null>(null);
   
   // Track last popup time and user activity to prevent spam
   const lastPopupTimeRef = useRef<number>(0);
@@ -231,8 +240,8 @@ function App() {
       {currentPage === 'conversation-history' && <ConversationHistoryPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
       {currentPage === 'manual' && <LogPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
       {currentPage === 'moodboard' && <LogPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
-      {currentPage === 'yoga-recommendations' && <YogaRecommendationPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
-      {currentPage === 'ayurveda-recommendations' && <AyurvedaRecommendationPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
+      {currentPage === 'yoga-recommendations' && <YogaRecommendationPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} onOpenPractice={(rec) => { setPreviousPage('yoga-recommendations'); setSelectedPractice(rec); setCurrentPage('practice'); }} />}
+      {currentPage === 'ayurveda-recommendations' && <AyurvedaRecommendationPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} onOpenPractice={(rec) => { setPreviousPage('ayurveda-recommendations'); setSelectedPractice(rec); setCurrentPage('practice'); }} />}
       {currentPage === 'diet' && <DietMoodPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
       {currentPage === 'progress' && <ProgressAnalyticsPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
       {currentPage === 'emotion-history' && <EmotionHistoryPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
@@ -243,6 +252,16 @@ function App() {
       {currentPage === 'dinacharya' && <DinacharyaPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
       {currentPage === 'profile' && <ProfilePage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
       {currentPage === 'settings' && <AccountSettingsPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
+      {currentPage === 'practice' && selectedPractice && (
+        <PracticeDetailPage
+          user={user}
+          recommendation={selectedPractice}
+          onNavigate={navigateToPage}
+          onLogout={handleLogout}
+          onOpenNotifications={() => setShowNotificationCenter(true)}
+          onClose={() => { setCurrentPage(previousPage); setSelectedPractice(null); }}
+        />
+      )}
 
       {/* Mood Input Popup */}
       <MoodInputPopup

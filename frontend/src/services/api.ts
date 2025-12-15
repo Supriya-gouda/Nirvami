@@ -1060,6 +1060,52 @@ class ApiService {
     const response = await this.api.get('/recommendations/grouped-by-source', { params });
     return response.data;
   }
+
+  // ==================== PRACTICE SESSIONS ====================
+  
+  async getPracticeContent(practiceName: string): Promise<any> {
+    const response = await this.api.get(`/practice/content/${encodeURIComponent(practiceName)}`);
+    return response.data;
+  }
+
+  async createPracticeSession(data: {
+    practice_type: string;
+    practice_name: string;
+    duration_minutes: number;
+    recommendation_id?: string;
+    completion_status?: string;
+    notes?: string;
+    difficulty_rating?: number;
+    satisfaction_rating?: number;
+  }): Promise<any> {
+    const response = await this.api.post('/practice/sessions', null, { params: data });
+    return response.data;
+  }
+
+  async getPracticeSessions(params?: {
+    limit?: number;
+    practice_type?: string;
+    start_date?: string;
+    end_date?: string;
+  }): Promise<any> {
+    const response = await this.api.get('/practice/sessions', { params });
+    return response.data;
+  }
+
+  async getPracticeStreak(): Promise<any> {
+    const response = await this.api.get('/practice/streak');
+    return response.data;
+  }
+
+  async getPracticeStats(days: number = 30): Promise<any> {
+    const response = await this.api.get('/practice/stats', { params: { days } });
+    return response.data;
+  }
+
+  async getPracticeWellnessContribution(): Promise<any> {
+    const response = await this.api.get('/practice/wellness-contribution');
+    return response.data;
+  }
 }
 
 // Export singleton instance

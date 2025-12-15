@@ -27,7 +27,8 @@ from app.api.routes import (
     goals,
     dinacharya,
     recommendations,  # New unified recommendation routes
-    notifications  # Notification routes
+    notifications,  # Notification routes
+    practice  # Practice tracking routes
 )
 from app.api.routes import wearable_v2  # New simplified wearable routes
 from app.ml.model_manager import ModelManager
@@ -138,6 +139,7 @@ app.include_router(goals.router, prefix=f"/api/{settings.API_VERSION}/goals", ta
 app.include_router(dosha.router, prefix=f"/api/{settings.API_VERSION}/dosha", tags=["Dosha"])
 app.include_router(yoga.router, prefix=f"/api/{settings.API_VERSION}/yoga", tags=["Yoga & Sound Therapy"])
 app.include_router(recommendations.router, prefix=f"/api/{settings.API_VERSION}/recommendations", tags=["Recommendations"])  # New unified recommendations
+app.include_router(practice.router, prefix=f"/api/{settings.API_VERSION}/practice", tags=["Practice"])  # Practice tracking
 app.include_router(meals.router, prefix=f"/api/{settings.API_VERSION}/meals", tags=["Meals"])
 app.include_router(routines.router, prefix=f"/api/{settings.API_VERSION}/routines", tags=["Daily Routines"])
 app.include_router(dinacharya.router, prefix=f"/api/{settings.API_VERSION}", tags=["Dinacharya"])

@@ -11,7 +11,8 @@ import {
   Star,
   ChevronRight,
   Heart,
-  Zap
+  Zap,
+  Play
 } from 'lucide-react';
 import { Navigation } from './Navigation';
 import { Button } from './ui/button';
@@ -28,13 +29,21 @@ interface YogaRecommendationPageProps {
   onNavigate: (page: PageType) => void;
   onLogout?: () => void;
   onOpenNotifications?: () => void;
+  onOpenPractice?: (recommendation: {
+    id?: string;
+    title: string;
+    content: string;
+    category?: string;
+    source?: string;
+  }) => void;
 }
 
 export function YogaRecommendationPage({
   user,
   onNavigate,
   onLogout,
-  onOpenNotifications
+  onOpenNotifications,
+  onOpenPractice
 }: YogaRecommendationPageProps) {
   const [yogaRecommendations, setYogaRecommendations] = useState<Recommendation[]>([]);
   const [recommendationsBySource, setRecommendationsBySource] = useState<RecommendationsBySource>({
@@ -211,7 +220,6 @@ export function YogaRecommendationPage({
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="group"
     >
       <Card className="hover:shadow-md transition-shadow duration-200 border-l-4 border-l-orange-400">
         <CardHeader className="pb-2">
@@ -235,9 +243,26 @@ export function YogaRecommendationPage({
           </div>
         </CardHeader>
         <CardContent>
-          <p className="text-gray-700 leading-relaxed whitespace-pre-line">
+          <p className="text-gray-700 leading-relaxed whitespace-pre-line mb-4">
             {recommendation.content}
           </p>
+          {onOpenPractice && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onOpenPractice({
+                id: recommendation.id,
+                title: recommendation.title,
+                content: recommendation.content,
+                category: 'yoga',
+                source: recommendation.source
+              })}
+              className="w-full bg-gradient-to-r from-orange-500 to-amber-500 text-white hover:from-orange-600 hover:to-amber-600 border-0"
+            >
+              <Play className="w-4 h-4 mr-2" />
+              Start Practice
+            </Button>
+          )}
         </CardContent>
       </Card>
     </motion.div>

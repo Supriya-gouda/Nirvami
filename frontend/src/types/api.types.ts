@@ -441,3 +441,80 @@ export interface RecommendationsBySource {
   device: Recommendation[];
   system: Recommendation[];
 }
+// Practice Types
+export interface PracticeContent {
+  id: string;
+  practice_type: 'yoga' | 'breathing' | 'meditation' | 'lifestyle';
+  practice_name: string;
+  sanskrit_name?: string;
+  description: string;
+  benefits: string[];
+  difficulty: 'beginner' | 'intermediate' | 'advanced';
+  duration_min: number;
+  duration_max: number;
+  youtube_video_id?: string;
+  youtube_title?: string;
+  avatar_animation_steps?: any; // JSONB
+  tts_instructions?: string[];
+  dosha_tags?: string[];
+  emotion_tags?: string[];
+  category?: string;
+  icon?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PracticeSession {
+  id: string;
+  user_id: string;
+  recommendation_id?: string;
+  practice_type: string;
+  practice_name: string;
+  duration_minutes: number;
+  completed_at: string;
+  completion_status: 'completed' | 'partially_completed' | 'skipped';
+  notes?: string;
+  difficulty_rating?: number;
+  satisfaction_rating?: number;
+  created_at: string;
+}
+
+export interface CreatePracticeSessionRequest {
+  recommendation_id?: string;
+  practice_type: string;
+  practice_name: string;
+  duration_minutes: number;
+  completion_status?: string;
+  notes?: string;
+  difficulty_rating?: number;
+  satisfaction_rating?: number;
+}
+
+export interface PracticeStreak {
+  id: string;
+  user_id: string;
+  current_streak: number;
+  longest_streak: number;
+  total_sessions: number;
+  last_practice_date: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PracticeStats {
+  total_practices: number;
+  total_minutes: number;
+  favorite_type: string;
+  practice_counts: Record<string, number>;
+  recent_sessions: PracticeSession[];
+}
+
+export interface PracticeWellnessContribution {
+  points: number;
+  breakdown: {
+    base_points: number;
+    duration_bonus: number;
+    variety_bonus: number;
+    streak_bonus: number;
+  };
+}
