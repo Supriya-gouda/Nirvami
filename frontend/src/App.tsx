@@ -21,11 +21,12 @@ import { AccountSettingsPage } from './components/AccountSettingsPage';
 import { DailyRoutinesPage } from './components/DailyRoutinesPage';
 import { DinacharyaPage } from './components/DinacharyaPage';
 import { PracticeDetailPage } from './components/PracticeDetailPage';
+import Journal from './pages/Journal';
 import { Toaster } from './components/ui/sonner';
 import { useAuth } from './contexts/AuthContext';
 import api from './services/api';
 
-export type PageType = 'landing' | 'signin' | 'signup' | 'dashboard' | 'chatbot' | 'conversation-history' | 'manual' | 'moodboard' | 'yoga-recommendations' | 'ayurveda-recommendations' | 'diet' | 'progress' | 'emotion-history' | 'aura' | 'device' | 'dosha' | 'profile' | 'settings' | 'routines' | 'dinacharya' | 'practice';
+export type PageType = 'landing' | 'signin' | 'signup' | 'dashboard' | 'chatbot' | 'conversation-history' | 'manual' | 'moodboard' | 'yoga-recommendations' | 'ayurveda-recommendations' | 'diet' | 'progress' | 'emotion-history' | 'aura' | 'device' | 'dosha' | 'profile' | 'settings' | 'routines' | 'dinacharya' | 'practice' | 'journal';
 
 function App() {
   const { user, isAuthenticated, isLoading, logout } = useAuth();
@@ -240,6 +241,7 @@ function App() {
       {currentPage === 'conversation-history' && <ConversationHistoryPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
       {currentPage === 'manual' && <LogPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
       {currentPage === 'moodboard' && <LogPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
+      {currentPage === 'journal' && <Journal user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
       {currentPage === 'yoga-recommendations' && <YogaRecommendationPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} onOpenPractice={(rec) => { setPreviousPage('yoga-recommendations'); setSelectedPractice(rec); setCurrentPage('practice'); }} />}
       {currentPage === 'ayurveda-recommendations' && <AyurvedaRecommendationPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} onOpenPractice={(rec) => { setPreviousPage('ayurveda-recommendations'); setSelectedPractice(rec); setCurrentPage('practice'); }} />}
       {currentPage === 'diet' && <DietMoodPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}

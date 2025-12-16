@@ -79,7 +79,8 @@ class GeminiChatbot:
             genai.configure(api_key=self.api_key)
             
             # Initialize model with safety settings in list format (newer SDK)
-            # Using gemini-flash-latest (stable with free tier)
+            # Using gemini-flash-latest (maps to gemini-2.5-flash)
+            # NOTE: Free tier has 20 requests/day limit - quota will reset in 24 hours
             self.model = genai.GenerativeModel(
                 model_name="gemini-flash-latest",
                 system_instruction=SYSTEM_INSTRUCTION,
@@ -92,7 +93,7 @@ class GeminiChatbot:
             )
             self.system_instruction = SYSTEM_INSTRUCTION
             
-            logger.info("✅ Gemini chatbot initialized successfully with model: gemini-flash-latest")
+            logger.info("✅ Gemini chatbot initialized successfully with model: gemini-flash-latest (gemini-2.5-flash)")
             
         except Exception as e:
             logger.error(f"❌ Failed to initialize Gemini: {e}", exc_info=True)
@@ -169,9 +170,31 @@ class GeminiChatbot:
             return response_text
             
         except Exception as e:
+            error_msg = str(e)
             logger.error(f"❌ Gemini chat error: {e}", exc_info=True)
             logger.error(f"[GEMINI] Message that caused error: {message[:200]}")
+            
+            # Check if it's a quota error
+            if "429" in error_msg or "quota" in error_msg.lower() or "ResourceExhausted" in error_msg:
+                logger.warning("⚠️  Gemini API quota exceeded - returning quota-specific message")
+                return self._quota_exceeded_response()
+            
             return self._fallback_response(message)
+    
+    def _quota_exceeded_response(self) -> str:
+        """Response when API quota is exceeded"""
+        return (
+            "I apologize, but I've reached my daily conversation limit with the AI service. "
+            "This happens because we're on a free tier that allows 20 conversations per day. "
+            "\n\n**What you can do:**\n"
+            "🕒 Try again in a few hours when the quota resets\n"
+            "💬 In the meantime, I can still:\n"
+            "   • Track your emotions and moods\n"
+            "   • Log your meals and wellness activities\n"
+            "   • Show you your aura and analytics\n"
+            "   • Provide practice content (yoga, meditation)\n"
+            "\n🙏 Thank you for your patience and understanding!"
+        )
     
     def _fallback_response(self, message: str) -> str:
         """Fallback response when Gemini is not available"""

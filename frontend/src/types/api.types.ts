@@ -191,19 +191,18 @@ export interface JournalEntry {
   user_id: string;
   date: string;
   content: string;
-  mood_tag?: string;
+  emotion?: string; // ML-detected emotion
+  emotion_confidence?: number; // ML confidence (0-1)
   created_at: string;
 }
 
 export interface CreateJournalRequest {
-  date: string;
+  date?: string;
   content: string;
-  mood_tag?: string;
 }
 
 export interface UpdateJournalRequest {
-  content?: string;
-  mood_tag?: string;
+  content: string;
 }
 
 // Goal Types

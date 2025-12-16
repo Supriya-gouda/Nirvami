@@ -11,7 +11,7 @@ AI-powered mental wellness platform with Ayurvedic intelligence - FastAPI Backen
 - **ML Models**:
   - Embeddings: `sentence-transformers/all-MiniLM-L6-v2`
   - Emotion Detection: `j-hartmann/emotion-english-distilroberta-base`
-  - LLM: `google/flan-t5-base`
+  - Emotion: `j-hartmann/emotion-english-distilroberta-base`
 - **Background Jobs**: RQ (Redis Queue)
 - **Notifications**: Twilio (SMS), SMTP (Email)
 

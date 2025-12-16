@@ -1,6 +1,6 @@
 import { motion } from 'motion/react';
 import { useState, useEffect } from 'react';
-import { Home, MessageCircle, FileText, Activity, UtensilsCrossed, TrendingUp, LogOut, Sparkles, Watch, Bell, User as UserIconLucide, Settings, CalendarCheck, Target, Leaf } from 'lucide-react';
+import { Home, MessageCircle, FileText, Activity, UtensilsCrossed, TrendingUp, LogOut, Sparkles, Watch, Bell, User as UserIconLucide, Settings, CalendarCheck, Target, Leaf, BookOpen } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import type { PageType, User } from '../App';
@@ -38,6 +38,7 @@ export function Navigation({ currentPage, onNavigate, onLogout, user, onOpenNoti
   const navItems = [
     { id: 'dashboard' as PageType, icon: Home, label: 'Dashboard' },
     { id: 'chatbot' as PageType, icon: MessageCircle, label: 'Chat' },
+    { id: 'journal' as PageType, icon: BookOpen, label: 'Journal' },
     { id: 'dinacharya' as PageType, icon: CalendarCheck, label: 'Dinacharya' },
     { id: 'aura' as PageType, icon: Sparkles, label: 'Aura' },
     { id: 'yoga-recommendations' as PageType, icon: Target, label: 'Yoga Recs' },

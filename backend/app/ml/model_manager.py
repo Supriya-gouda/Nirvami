@@ -1,8 +1,6 @@
-"""ML Model Manager - loads and manages all AI models."""
+"""ML Model Manager - loads and manages AI models for embeddings and emotion detection."""
 import torch
 from transformers import (
-    AutoTokenizer,
-    AutoModelForSeq2SeqLM,
     AutoModelForSequenceClassification,
     pipeline
 )
@@ -15,24 +13,21 @@ logger = logging.getLogger(__name__)
 
 
 class ModelManager:
-    """Manages loading and caching of ML models."""
+    """Manages loading and caching of ML models (embeddings and emotion detection)."""
     
     def __init__(self):
         self.embedding_model = None
         self.emotion_model = None
-        self.llm_model = None
-        self.llm_tokenizer = None
         self.emotion_pipeline = None
         
         # Create cache directory
         os.makedirs(settings.MODEL_CACHE_DIR, exist_ok=True)
     
     async def load_models(self):
-        """Load all ML models asynchronously."""
+        """Load ML models asynchronously."""
         try:
             await self._load_embedding_model()
             await self._load_emotion_model()
-            await self._load_llm_model()
         except Exception as e:
             logger.error(f"Error loading models: {e}")
             raise
@@ -65,28 +60,13 @@ class ModelManager:
             logger.error(f"Error loading emotion model: {e}")
             raise
     
-    async def _load_llm_model(self):
-        """Load FLAN-T5 model for response generation."""
-        try:
-            logger.info(f"Loading LLM model: {settings.LLM_MODEL}")
-            self.llm_tokenizer = AutoTokenizer.from_pretrained(
-                settings.LLM_MODEL,
-                cache_dir=settings.MODEL_CACHE_DIR
-            )
-            self.llm_model = AutoModelForSeq2SeqLM.from_pretrained(
-                settings.LLM_MODEL,
-                cache_dir=settings.MODEL_CACHE_DIR,
-                torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32
-            )
-            
-            # Move to GPU if available
-            if torch.cuda.is_available():
-                self.llm_model = self.llm_model.to("cuda")
-            
-            logger.info("LLM model loaded successfully")
-        except Exception as e:
-            logger.error(f"Error loading LLM model: {e}")
-            raise
+    def get_embedding_model(self):
+        """Get sentence transformer model (lazy-loaded and cached)."""
+        return self.embedding_model
+    
+    def get_emotion_model(self):
+        """Get emotion classification pipeline (lazy-loaded and cached)."""
+        return self.emotion_pipeline
     
     def generate_embedding(self, text: str) -> list:
         """
@@ -130,55 +110,6 @@ class ModelManager:
             "confidence": dominant['score'],
             "all_scores": emotion_scores
         }
-    
-    def generate_response(
-        self,
-        prompt: str,
-        max_length: int = 256,
-        temperature: float = 0.7,
-        top_p: float = 0.9
-    ) -> str:
-        """
-        Generate text response using FLAN-T5.
-        
-        Args:
-            prompt: Input prompt
-            max_length: Maximum response length
-            temperature: Sampling temperature
-            top_p: Nucleus sampling parameter
-            
-        Returns:
-            Generated text response
-        """
-        if self.llm_model is None or self.llm_tokenizer is None:
-            raise RuntimeError("LLM model not loaded")
-        
-        # Tokenize input
-        inputs = self.llm_tokenizer(
-            prompt,
-            return_tensors="pt",
-            max_length=512,
-            truncation=True
-        )
-        
-        # Move to same device as model
-        if torch.cuda.is_available():
-            inputs = {k: v.to("cuda") for k, v in inputs.items()}
-        
-        # Generate response
-        with torch.no_grad():
-            outputs = self.llm_model.generate(
-                **inputs,
-                max_length=max_length,
-                temperature=temperature,
-                top_p=top_p,
-                do_sample=True,
-                num_return_sequences=1
-            )
-        
-        # Decode response
-        response = self.llm_tokenizer.decode(outputs[0], skip_special_tokens=True)
-        return response
     
     def batch_generate_embeddings(self, texts: list) -> list:
         """Generate embeddings for multiple texts."""

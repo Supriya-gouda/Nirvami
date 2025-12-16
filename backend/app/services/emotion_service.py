@@ -3,8 +3,20 @@ import logging
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 import uuid
+from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+# Label mapping from model output to internal emotion names
+LABEL_MAP = {
+    "joy": "joy",
+    "sadness": "sadness",
+    "anger": "anger",
+    "fear": "fear",
+    "surprise": "surprise",
+    "disgust": "disgust",
+    "neutral": "neutral"
+}
 
 
 class EmotionService:
@@ -22,61 +34,137 @@ class EmotionService:
             'joy', 'sadness', 'anger', 'fear', 'surprise', 'disgust', 'neutral'
         ]
     
-    def detect_emotion(self, text: str) -> Dict:
+    def detect_emotion(self, text: str, source: str = "chat", min_confidence: float = None) -> Dict:
         """
         Detect emotion from text using ML model or rule-based fallback.
         
+        ML-first approach:
+        1. Try ML model if enabled and available
+        2. Check confidence threshold (lower for journals: 0.40, higher for chat: 0.55)
+        3. Fallback to rules if ML fails or confidence too low
+        
         Args:
             text: Input text to analyze
+            source: Source of text ("chat" or "journal") - affects confidence threshold
+            min_confidence: Optional override for minimum confidence threshold
             
         Returns:
-            Dict with emotion_type, confidence, and all_scores
+            Dict with primary_emotion, confidence, emotion_scores, and source
         """
-        if self.model_manager and self.model_manager.emotion_pipeline:
-            return self._detect_with_ml(text)
+        # Determine confidence threshold based on source
+        if min_confidence is not None:
+            confidence_threshold = min_confidence
+        elif source == "journal":
+            confidence_threshold = 0.40  # Lower threshold for reflective journal text
         else:
-            return self._detect_with_rules(text)
+            confidence_threshold = settings.EMOTION_CONFIDENCE_THRESHOLD  # 0.55 for chat
+        
+        logger.info(f"[EMOTION] Detecting emotion for {source} (threshold: {confidence_threshold})")
+        
+        # ML-first pipeline
+        if settings.USE_ML_EMOTION_MODEL and self.model_manager:
+            try:
+                emotion_model = self.model_manager.get_emotion_model()
+                if emotion_model is not None:
+                    ml_result = self._detect_with_ml(text, emotion_model)
+                    
+                    logger.info(f"[EMOTION] ML returned: {ml_result['primary_emotion']} @ {ml_result['confidence']:.2f}")
+                    
+                    # Check confidence threshold
+                    if ml_result['confidence'] >= confidence_threshold:
+                        logger.info(f"[EMOTION] ML confidence {ml_result['confidence']:.2f} >= {confidence_threshold} → ACCEPTED")
+                        return ml_result
+                    else:
+                        logger.warning(f"[EMOTION] ML confidence {ml_result['confidence']:.2f} < {confidence_threshold} → falling back to rules")
+                        return self._detect_with_rules(text)
+            except Exception as e:
+                logger.error(f"[EMOTION] ML detection failed: {e}, falling back to rule-based detection")
+                logger.exception(e)
+                return self._detect_with_rules(text)
+        
+        # Fallback to rule-based detection
+        logger.warning(f"[EMOTION] ML not available, using rule-based detection")
+        return self._detect_with_rules(text)
     
-    def _detect_with_ml(self, text: str) -> Dict:
-        """Use ML model for emotion detection."""
-        try:
-            results = self.model_manager.emotion_pipeline(text)[0]
-            
-            # Convert to our format
-            all_scores = {item['label']: item['score'] for item in results}
-            
-            # Get dominant emotion
-            dominant = max(results, key=lambda x: x['score'])
-            
+    def _detect_with_ml(self, text: str, emotion_model) -> Dict:
+        """Use ML model for emotion detection with label mapping and normalization."""
+        # Log original text length
+        logger.info(f"[EMOTION] Text length: {len(text)} chars")
+        
+        # Validate text
+        if len(text.strip()) < 10:
+            logger.warning(f"[EMOTION] Text too short ({len(text)} chars), returning neutral")
             return {
-                'emotion_type': dominant['label'],
-                'confidence': float(dominant['score']),
-                'all_scores': all_scores
+                'primary_emotion': 'neutral',
+                'emotion_type': 'neutral',
+                'confidence': 0.5,
+                'emotion_scores': {'neutral': 1.0},
+                'all_scores': {'neutral': 1.0},
+                'source': 'ml'
             }
-        except Exception as e:
-            logger.error(f"ML emotion detection failed: {e}")
-            return self._detect_with_rules(text)
+        
+        # For chat messages, truncate to prevent token overflow
+        # For journal entries, caller should handle this
+        # Max 512 tokens ~ 2000 chars for transformer models
+        if len(text) > 2000:
+            logger.info(f"[EMOTION] Truncating text from {len(text)} to 2000 chars for ML model")
+            text = text[:2000]
+        
+        # Run inference
+        results = emotion_model(text)[0]
+        
+        # Map model labels to internal emotion names and normalize scores
+        mapped_scores = {}
+        for item in results:
+            model_label = item['label'].lower()
+            internal_label = LABEL_MAP.get(model_label, 'neutral')
+            score = float(item['score'])
+            
+            # Aggregate scores if model returns multiple labels for same emotion
+            if internal_label in mapped_scores:
+                mapped_scores[internal_label] = max(mapped_scores[internal_label], score)
+            else:
+                mapped_scores[internal_label] = score
+        
+        # Get emotion with highest confidence
+        primary_emotion = max(mapped_scores, key=mapped_scores.get)
+        confidence = mapped_scores[primary_emotion]
+        
+        return {
+            'primary_emotion': primary_emotion,
+            'emotion_type': primary_emotion,  # Backward compatibility
+            'confidence': confidence,
+            'emotion_scores': mapped_scores,
+            'all_scores': mapped_scores,  # Backward compatibility
+            'source': 'ml'
+        }
     
     def detect_contextual_emotion(self, texts: List[str]) -> Dict:
         """
         Detect emotion from a sequence of texts (contextual analysis).
+        Uses last 3 messages for context to prevent token overflow.
         
         Args:
             texts: List of text messages to analyze together
             
         Returns:
-            Dict with emotion_type, confidence, and all_scores
+            Dict with primary_emotion, confidence, emotion_scores, and source
         """
         if not texts:
             return {
-                'emotion_type': 'neutral',
+                'primary_emotion': 'neutral',
+                'emotion_type': 'neutral',  # Backward compatibility
                 'confidence': 0.5,
-                'all_scores': {'neutral': 1.0}
+                'emotion_scores': {'neutral': 1.0},
+                'all_scores': {'neutral': 1.0},  # Backward compatibility
+                'source': 'rules'
             }
-            
-        # Combine texts to analyze the flow
-        # We give more weight to recent messages by repeating them
-        combined_text = " ".join(texts[:-1] + [texts[-1]] * 2)
+        
+        # Use last 3 messages max for context (prevent token overflow)
+        context_texts = texts[-3:] if len(texts) > 3 else texts
+        
+        # Combine with emphasis on most recent message
+        combined_text = " ".join(context_texts[:-1] + [context_texts[-1]] * 2)
         
         return self.detect_emotion(combined_text)
 
@@ -105,9 +193,12 @@ class EmotionService:
         dominant_emotion = max(scores, key=scores.get)
         
         return {
-            'emotion_type': dominant_emotion,
+            'primary_emotion': dominant_emotion,
+            'emotion_type': dominant_emotion,  # Backward compatibility
             'confidence': float(scores[dominant_emotion]),
-            'all_scores': scores
+            'emotion_scores': scores,
+            'all_scores': scores,  # Backward compatibility
+            'source': 'rules'
         }
     
     def create_emotion_log(

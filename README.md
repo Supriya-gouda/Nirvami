@@ -19,7 +19,7 @@ An intelligent mental health companion that bridges ancient Ayurvedic wisdom wit
 
 ## ✨ Features
 
-- **🧠 AI Emotion Detection**: 15 mental states with ML-powered analysis (Flan-T5, MiniLM)
+- **🧠 AI Emotion Detection**: 7 emotion states with ML-powered analysis (DistilRoBERTa)
 - **🎨 Aura Visualization**: Dynamic 3D aura sphere with 9 colors based on emotions
 - **🧘 Ayurvedic Dosha**: Personalized Vata/Pitta/Kapha recommendations
 - **💪 Wellness Score**: Multi-dimensional scoring (emotion, physical, lifestyle)
@@ -36,7 +36,7 @@ An intelligent mental health companion that bridges ancient Ayurvedic wisdom wit
 
 **Frontend**: React 18 + TypeScript, TailwindCSS, Framer Motion, Axios, Vite  
 **Backend**: FastAPI (Python 3.10+), Supabase PostgreSQL, JWT Auth  
-**AI Models**: Google Gemini (gemini-flash-latest), Flan-T5-Base, MiniLM-L6-v2  
+**AI Models**: Google Gemini (gemini-flash-latest), DistilRoBERTa (emotion), MiniLM-L6-v2 (embeddings)  
 **Services**: Twilio SMS, Redis (RQ jobs)
 
 ---

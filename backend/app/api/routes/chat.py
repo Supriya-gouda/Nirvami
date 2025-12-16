@@ -172,18 +172,29 @@ async def send_message(
         # Contextual Emotion Detection
         # 1. Get recent user messages for context
         recent_user_msgs = [msg["content"] for msg in chat_history if msg["role"] == "user"][-5:]
-        recent_user_msgs.append(message_req.content)
         
         # 2. Detect emotion from the sequence
-        # Skip if message is too short (noise reduction)
+        # For short greetings/messages, analyze WITHOUT context to avoid inheriting
+        # emotion from previous emotional messages
         try:
-            if len(message_req.content) < 5 and len(recent_user_msgs) == 1:
+            current_msg = message_req.content.strip()
+            is_short_message = len(current_msg) <= 15
+            is_greeting = current_msg.lower() in ['hi', 'hello', 'hey', 'hey there', 'hi there', 'hello there', 'greetings', 'good morning', 'good afternoon', 'good evening']
+            
+            if (is_short_message or is_greeting) and len(recent_user_msgs) > 0:
+                # Analyze the current message ALONE, not with context
+                logger.info(f"[CHAT] Short/greeting message detected, analyzing without context")
+                emotion_data = emotion_service.detect_emotion(current_msg)
+            elif len(current_msg) < 5 and len(recent_user_msgs) == 0:
+                # Very short first message - use neutral
                 emotion_data = {
                     'emotion_type': 'neutral',
                     'confidence': 0.5,
                     'all_scores': {'neutral': 1.0}
                 }
             else:
+                # Regular message - use contextual detection
+                recent_user_msgs.append(current_msg)
                 emotion_data = emotion_service.detect_contextual_emotion(recent_user_msgs)
         except Exception as emotion_detect_err:
             logger.warning(f"[CHAT] Emotion detection failed, using neutral: {emotion_detect_err}")

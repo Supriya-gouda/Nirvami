@@ -17,7 +17,8 @@ import {
   Sparkles,
   ChevronLeft,
   ChevronRight,
-  Loader2
+  Loader2,
+  BookOpen
 } from 'lucide-react';
 import { Navigation } from './Navigation';
 import { Button } from './ui/button';
@@ -86,7 +87,7 @@ export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications, onR
             start_date: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0],
             end_date: new Date().toISOString().split('T')[0]
           }).catch(() => []),
-          api.recordVisit().catch(() => ({ current_streak: 0, longest_streak: 0 })),
+          api.recordVisit().catch(() => ({ ok: true, current_streak: 0 })),
           api.getLatestWearableData().catch((err) => {
             console.error('Error fetching wearable data:', err);
             return { hasData: false, steps: 0, sleepHours: 0, heartRate: 0, stressLevel: 0 };
@@ -100,6 +101,7 @@ export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications, onR
         setDoshaData(dosha);
         setRecentEmotions(emotions);
         setWearableSummary(wearable || { hasData: false, steps: 0, sleepHours: 0, heartRate: 0, stressLevel: 0 });
+        // Handle both old and new response formats
         setStreak(streakData?.current_streak || 0);
         setLongestStreak(streakData?.longest_streak || 0);
         setDynamicAura(latestAura); // Apply dynamic aura gradient and text based on backend response
@@ -218,6 +220,14 @@ export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications, onR
       gradient: 'from-emerald-400 to-teal-400',
       bgGradient: 'from-emerald-50 to-teal-50',
       description: 'Track manually'
+    },
+    {
+      id: 'journal' as PageType,
+      icon: BookOpen,
+      label: 'Journal',
+      gradient: 'from-amber-400 to-orange-400',
+      bgGradient: 'from-amber-50 to-orange-50',
+      description: '📖 Daily journal'
     },
     {
       id: 'aura' as PageType,

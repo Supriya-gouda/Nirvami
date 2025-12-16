@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     FROM_EMAIL: str = "noreply@nirvami.app"
     
     # Google Gemini API
-    GEMINI_API_KEY: str = "AIzaSyCZ4ylp8dpuN2nSzJNe-clic-ex_GKOvPQ"
+    GEMINI_API_KEY: str = "AIzaSyA6jiyvBEPWScNfI8YH47MGW8LCoS6yReA"
     
     # Application
     SECRET_KEY: str
@@ -40,17 +40,21 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     ALLOWED_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
     
-    # ML Models
+    # ML Models (Embeddings and Emotion Detection)
+    # Note: Local LLM (Flan-T5) was deprecated - using Gemini API for text generation
     MODEL_CACHE_DIR: str = "./models_cache"
     EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
     EMOTION_MODEL: str = "j-hartmann/emotion-english-distilroberta-base"
-    LLM_MODEL: str = "google/flan-t5-base"
     
     # Features
     ENABLE_VOICE_EMOTION: bool = False
     CRISIS_ALERT_ENABLED: bool = True
     ENABLE_ML_MODELS: bool = True  # Enable ML models for production
     USE_MOCK_DATA: bool = False  # Use real database
+    
+    # Emotion Detection Settings
+    USE_ML_EMOTION_MODEL: bool = True  # Use ML model for emotion detection (fallback to rules if fails)
+    EMOTION_CONFIDENCE_THRESHOLD: float = 0.55  # Min confidence to use ML result, else fallback to rules
     
     @property
     def origins_list(self) -> List[str]:

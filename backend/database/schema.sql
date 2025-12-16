@@ -127,7 +127,9 @@ CREATE TABLE IF NOT EXISTS journal_entries (
     user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
     date DATE NOT NULL,
     content TEXT NOT NULL,
-    mood_tag TEXT, -- e.g., 'happy', 'stressed', 'calm', 'anxious'
+    mood_tag TEXT, -- e.g., 'happy', 'stressed', 'calm', 'anxious' (DEPRECATED - use emotion instead)
+    emotion VARCHAR(50), -- ML-detected emotion: joy, sadness, anger, fear, surprise, disgust, neutral
+    emotion_confidence FLOAT, -- ML confidence score (0-1)
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

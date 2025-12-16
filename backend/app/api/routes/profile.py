@@ -324,111 +324,147 @@ async def delete_account(
 async def get_current_streak(
     current_user_id: str = Depends(get_current_user_id)
 ):
-    """Get current login streak and visit history."""
-    supabase = get_supabase()
-    
+    """
+    Get current login streak and visit history.
+    Never crashes - returns default data on any error.
+    """
     try:
-        # Get or create preferences
+        # Use service role for reliable operations
+        supabase = get_supabase(use_service_role=True)
+        
+        # Get preferences
         result = supabase.table("user_preferences").select("*").eq("user_id", current_user_id).execute()
         
-        if not result.data or len(result.data) == 0:
-            # Create default preferences
-            default_prefs = {
-                "user_id": current_user_id,
-                "preferences": {
-                    "streak_data": {
-                        "current_streak": 0,
-                        "longest_streak": 0,
-                        "last_visit_date": None,
-                        "visit_dates": []
-                    }
-                }
-            }
-            create_result = supabase_admin = get_supabase(use_service_role=True)
-            create_result = supabase_admin.table("user_preferences").insert(default_prefs).execute()
-            prefs = create_result.data[0] if create_result.data else default_prefs
-        else:
-            prefs = result.data[0]
-        
-        streak_data = prefs.get("preferences", {}).get("streak_data", {
+        # Default streak data for new users or errors
+        default_streak = {
             "current_streak": 0,
             "longest_streak": 0,
             "last_visit_date": None,
             "visit_dates": []
-        })
+        }
+        
+        if not result.data or len(result.data) == 0:
+            # No preferences yet - return defaults (will be created on first visit)
+            logger.info(f"ℹ️ No streak data for user {current_user_id}, returning defaults")
+            return default_streak
+        
+        prefs = result.data[0]
+        streak_data = prefs.get("preferences", {}).get("streak_data", default_streak)
+        
+        # Ensure all required fields exist
+        streak_data.setdefault("current_streak", 0)
+        streak_data.setdefault("longest_streak", 0)
+        streak_data.setdefault("last_visit_date", None)
+        streak_data.setdefault("visit_dates", [])
         
         return streak_data
         
     except Exception as e:
-        logger.error(f"Error fetching streak data: {e}")
-        raise HTTPException(status_code=500, detail="Failed to fetch streak data")
+        # NEVER CRASH - return default data
+        logger.error(f"❌ Error fetching streak data for {current_user_id}: {e}")
+        return {
+            "current_streak": 0,
+            "longest_streak": 0,
+            "last_visit_date": None,
+            "visit_dates": []
+        }
 
 
 @router.post("/streak/record-visit")
 async def record_visit(
     current_user_id: str = Depends(get_current_user_id)
 ):
-    """Record a visit and update streak."""
-    from datetime import date
+    """
+    Record a visit and update streak.
+    Safe to call multiple times per day - idempotent.
+    NEVER crashes - returns success even on DB errors.
+    """
+    from datetime import date, datetime
     
-    supabase = get_supabase()
     today_str = date.today().isoformat()
     
     try:
+        # Use service role to bypass RLS for reliable operations
+        supabase = get_supabase(use_service_role=True)
+        
         # Get current preferences
         result = supabase.table("user_preferences").select("*").eq("user_id", current_user_id).execute()
         
+        # Initialize default streak data
+        default_streak = {
+            "current_streak": 1,
+            "longest_streak": 1,
+            "last_visit_date": today_str,
+            "visit_dates": [today_str]
+        }
+        
         if not result.data or len(result.data) == 0:
-            # Create new preferences with first visit
-            prefs = {
-                "user_id": current_user_id,
-                "preferences": {
-                    "streak_data": {
-                        "current_streak": 1,
-                        "longest_streak": 1,
-                        "last_visit_date": today_str,
-                        "visit_dates": [today_str]
+            # No row exists - try to create one
+            try:
+                prefs = {
+                    "user_id": current_user_id,
+                    "preferences": {
+                        "streak_data": default_streak
                     }
                 }
-            }
-            supabase_admin = get_supabase(use_service_role=True)
-            supabase_admin.table("user_preferences").insert(prefs).execute()
-            return prefs["preferences"]["streak_data"]
+                insert_result = supabase.table("user_preferences").insert(prefs).execute()
+                if insert_result.data:
+                    logger.info(f"✅ Created new user preferences for {current_user_id}, streak=1")
+                    return {
+                        "ok": True,
+                        "streak_updated": True,
+                        "current_streak": 1
+                    }
+            except Exception as insert_err:
+                # Row might have been created by another request (race condition)
+                # Try to fetch it again
+                logger.warning(f"⚠️ Insert failed (likely race condition): {insert_err}")
+                retry_result = supabase.table("user_preferences").select("*").eq("user_id", current_user_id).execute()
+                if retry_result.data and len(retry_result.data) > 0:
+                    # Successfully fetched after race condition
+                    result = retry_result
+                else:
+                    # Complete failure - return graceful fallback
+                    logger.error(f"❌ Failed to create or fetch preferences for {current_user_id}")
+                    return {
+                        "ok": True,
+                        "streak_updated": False,
+                        "current_streak": 0
+                    }
         
+        # Row exists - process streak update
         prefs = result.data[0]
-        streak_data = prefs.get("preferences", {}).get("streak_data", {
-            "current_streak": 0,
-            "longest_streak": 0,
-            "last_visit_date": None,
-            "visit_dates": []
-        })
+        streak_data = prefs.get("preferences", {}).get("streak_data", default_streak.copy())
         
         last_visit = streak_data.get("last_visit_date")
-        visit_dates = streak_data.get("visit_dates", [])
         
-        # Check if already visited today
+        # Check if already visited today - IDEMPOTENT
         if last_visit == today_str:
-            return streak_data
+            logger.info(f"ℹ️ User {current_user_id} already visited today, returning existing streak")
+            return {
+                "ok": True,
+                "streak_updated": False,
+                "current_streak": streak_data.get("current_streak", 0)
+            }
         
-        # Add today to visit dates
-        if today_str not in visit_dates:
-            visit_dates.append(today_str)
-        
-        # Calculate streak
-        from datetime import datetime, timedelta
+        # Calculate new streak
         if last_visit:
-            last_date = datetime.fromisoformat(last_visit).date()
-            today_date = date.today()
-            days_diff = (today_date - last_date).days
-            
-            if days_diff == 1:
-                # Consecutive day
-                streak_data["current_streak"] = streak_data.get("current_streak", 0) + 1
-            else:
-                # Streak broken
+            try:
+                last_date = datetime.fromisoformat(last_visit).date()
+                today_date = date.today()
+                days_diff = (today_date - last_date).days
+                
+                if days_diff == 1:
+                    # Consecutive day - increment streak
+                    streak_data["current_streak"] = streak_data.get("current_streak", 0) + 1
+                else:
+                    # Streak broken - reset to 1
+                    streak_data["current_streak"] = 1
+            except (ValueError, TypeError) as date_err:
+                logger.warning(f"⚠️ Invalid last_visit_date: {last_visit}, resetting streak")
                 streak_data["current_streak"] = 1
         else:
-            # First visit
+            # First visit ever
             streak_data["current_streak"] = 1
         
         # Update longest streak
@@ -437,21 +473,44 @@ async def record_visit(
             streak_data["current_streak"]
         )
         streak_data["last_visit_date"] = today_str
+        
+        # Update visit dates (keep last 30 days to prevent bloat)
+        visit_dates = streak_data.get("visit_dates", [])
+        if today_str not in visit_dates:
+            visit_dates.append(today_str)
+        visit_dates = visit_dates[-30:]  # Keep only last 30 days
         streak_data["visit_dates"] = visit_dates
         
-        # Update preferences
-        updated_prefs = prefs.copy()
-        if "preferences" not in updated_prefs:
-            updated_prefs["preferences"] = {}
-        updated_prefs["preferences"]["streak_data"] = streak_data
+        # Update database
+        updated_prefs = prefs.get("preferences", {})
+        updated_prefs["streak_data"] = streak_data
         
-        supabase.table("user_preferences").update({"preferences": updated_prefs["preferences"]}).eq(
-            "user_id", current_user_id
-        ).execute()
+        update_result = supabase.table("user_preferences").update({
+            "preferences": updated_prefs
+        }).eq("user_id", current_user_id).execute()
         
-        return streak_data
+        if update_result.data:
+            logger.info(f"✅ Updated streak for {current_user_id}: {streak_data['current_streak']} days")
+            return {
+                "ok": True,
+                "streak_updated": True,
+                "current_streak": streak_data["current_streak"]
+            }
+        else:
+            logger.warning(f"⚠️ Update returned no data for {current_user_id}")
+            return {
+                "ok": True,
+                "streak_updated": False,
+                "current_streak": streak_data["current_streak"]
+            }
         
     except Exception as e:
-        logger.error(f"Error recording visit: {e}")
-        raise HTTPException(status_code=500, detail="Failed to record visit")
+        # NEVER CRASH - log error and return graceful fallback
+        logger.error(f"❌ Error recording visit for {current_user_id}: {e}")
+        logger.exception(e)
+        return {
+            "ok": True,
+            "streak_updated": False,
+            "current_streak": 0
+        }
 
