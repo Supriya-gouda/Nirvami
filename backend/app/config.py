@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     # Note: Local LLM (Flan-T5) was deprecated - using Gemini API for text generation
     MODEL_CACHE_DIR: str = "./models_cache"
     EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
-    EMOTION_MODEL: str = "j-hartmann/emotion-english-distilroberta-base"
+    EMOTION_MODEL: str = "SamLowe/roberta-base-go_emotions"
     
     # Features
     ENABLE_VOICE_EMOTION: bool = False

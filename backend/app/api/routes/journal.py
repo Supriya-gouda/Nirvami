@@ -119,8 +119,8 @@ async def create_journal_entry(
         
         # STEP 2: Save journal entry with emotion data
         logger.info(f"[JOURNAL][DB] Saving entry to database")
-        logger.info(f"[JOURNAL][DB] Updating journal_entries.id={journal_id}")
-        logger.info(f"[JOURNAL][DB] emotion={emotion_type}, confidence={emotion_confidence}")
+        logger.info(f"[JOURNAL][DB] journal_id={journal_id}, user_id={current_user_id}")
+        logger.info(f"[JOURNAL][DB] date={entry_date.isoformat()}, emotion={emotion_type}, confidence={emotion_confidence}")
         
         result = supabase.table("journal_entries").insert({
             "id": journal_id,
@@ -136,8 +136,11 @@ async def create_journal_entry(
             raise HTTPException(status_code=500, detail="Failed to create journal entry")
         
         saved_entry = result.data[0]
-        logger.info(f"[JOURNAL][DB] Journal entry {journal_id} saved successfully")
-        logger.info(f"[JOURNAL][DB] Returned emotion: {saved_entry.get('emotion')}, confidence: {saved_entry.get('emotion_confidence')}")
+        logger.info(f"[JOURNAL][DB] ✅ Journal entry saved successfully:")
+        logger.info(f"[JOURNAL][DB]    - ID: {saved_entry.get('id')}")
+        logger.info(f"[JOURNAL][DB]    - Date: {saved_entry.get('date')}")
+        logger.info(f"[JOURNAL][DB]    - Emotion: {saved_entry.get('emotion')} ({saved_entry.get('emotion_confidence')})")
+        logger.info(f"[JOURNAL][DB]    - Created at: {saved_entry.get('created_at')}")
         
         # Verify emotion was persisted
         if emotion_type and saved_entry.get('emotion') != emotion_type:
@@ -167,13 +170,17 @@ async def get_journal_entries(
         date_filter: Optional date filter in YYYY-MM-DD format (returns entries for that specific date)
         days: Number of days to fetch if date_filter not specified (default 30)
     """
-    supabase = get_supabase()
+    # Use service role to bypass RLS
+    supabase = get_supabase(use_service_role=True)
     
     try:
+        logger.info(f"[JOURNAL][GET] Fetching entries for user {current_user_id}, date_filter={date_filter}, days={days}")
+        
         # If specific date provided, filter by exact date
         if date_filter:
             try:
                 target_date = date_filter if isinstance(date_filter, str) else date_filter
+                logger.info(f"[JOURNAL][GET] Filtering by specific date: {target_date}")
                 result = (
                     supabase.table("journal_entries")
                     .select("*")
@@ -188,6 +195,7 @@ async def get_journal_entries(
             # Fetch last N days
             from datetime import timedelta
             since_date = (date.today() - timedelta(days=days)).isoformat()
+            logger.info(f"[JOURNAL][GET] Fetching entries since {since_date} (last {days} days)")
             result = (
                 supabase.table("journal_entries")
                 .select("*")
@@ -197,12 +205,19 @@ async def get_journal_entries(
                 .execute()
             )
         
+        entries_count = len(result.data) if result.data else 0
+        logger.info(f"[JOURNAL][GET] Returning {entries_count} entries for user {current_user_id}")
+        
+        if entries_count > 0:
+            dates = list(set([e.get('date') for e in result.data]))
+            logger.info(f"[JOURNAL][GET] Dates in response: {sorted(dates)}")
+        
         return result.data if result.data else []
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error fetching journal entries: {e}")
+        logger.error(f"[JOURNAL][GET] Error fetching journal entries: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

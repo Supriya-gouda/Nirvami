@@ -46,16 +46,16 @@ class ModelManager:
             raise
     
     async def _load_emotion_model(self):
-        """Load emotion classification model."""
+        """Load emotion classification model (go_emotions)."""
         try:
-            logger.info(f"Loading emotion model: {settings.EMOTION_MODEL}")
+            logger.info(f"[MODEL] Loading go_emotions model: {settings.EMOTION_MODEL}")
             self.emotion_pipeline = pipeline(
                 "text-classification",
                 model=settings.EMOTION_MODEL,
-                return_all_scores=True,
+                top_k=None,  # Return all scores for go_emotions
                 device=0 if torch.cuda.is_available() else -1
             )
-            logger.info("Emotion model loaded successfully")
+            logger.info("[MODEL] Loaded go_emotions model successfully")
         except Exception as e:
             logger.error(f"Error loading emotion model: {e}")
             raise

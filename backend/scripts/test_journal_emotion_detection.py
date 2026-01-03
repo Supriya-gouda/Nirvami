@@ -1,5 +1,5 @@
 """
-Test script to verify journal emotion detection using DistilRoBERTa.
+Test script to verify journal emotion detection using go_emotions.
 Tests two different journal texts to ensure different emotions are detected.
 """
 

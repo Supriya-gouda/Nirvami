@@ -466,7 +466,6 @@ Nirvami/
 │   │   ├── update_wellness_schema.py
 │   │   └── ...
 │   ├── models_cache/             # ML models (auto-downloaded)
-│   │   ├── models--google--flan-t5-base/
 │   │   └── models--sentence-transformers--all-MiniLM-L6-v2/
 │   ├── requirements.txt          # Python dependencies
 │   ├── run_dev.py                # Development server script

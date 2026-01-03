@@ -39,23 +39,75 @@ interface JournalInsight {
 }
 
 const emotionEmojis: { [key: string]: string } = {
+  // Positive emotions
+  admiration: '🌟',
+  amusement: '😄',
+  approval: '👍',
+  caring: '🤗',
+  excitement: '🎉',
+  gratitude: '🙏',
   joy: '😊',
-  sadness: '😢',
+  love: '❤️',
+  optimism: '🌈',
+  pride: '💪',
+  relief: '😌',
+  
+  // Negative emotions
   anger: '😠',
-  fear: '😨',
-  surprise: '😮',
+  annoyance: '😤',
+  disappointment: '😞',
+  disapproval: '👎',
   disgust: '🤢',
+  embarrassment: '😳',
+  fear: '😨',
+  grief: '😭',
+  nervousness: '😰',
+  remorse: '😔',
+  sadness: '😢',
+  
+  // Ambiguous/neutral
+  confusion: '😕',
+  curiosity: '🤔',
+  desire: '😍',
   neutral: '😐',
+  realization: '💡',
+  surprise: '😮',
 };
 
 const emotionColors: { [key: string]: string } = {
+  // Positive emotions
+  admiration: 'bg-purple-100 text-purple-800 border-purple-300',
+  amusement: 'bg-yellow-100 text-yellow-800 border-yellow-300',
+  approval: 'bg-green-100 text-green-800 border-green-300',
+  caring: 'bg-pink-100 text-pink-800 border-pink-300',
+  excitement: 'bg-orange-100 text-orange-800 border-orange-300',
+  gratitude: 'bg-teal-100 text-teal-800 border-teal-300',
   joy: 'bg-yellow-100 text-yellow-800 border-yellow-300',
+  love: 'bg-red-100 text-red-800 border-red-300',
+  optimism: 'bg-cyan-100 text-cyan-800 border-cyan-300',
+  pride: 'bg-indigo-100 text-indigo-800 border-indigo-300',
+  relief: 'bg-lime-100 text-lime-800 border-lime-300',
+  
+  // Negative emotions
+  anger: 'bg-red-200 text-red-900 border-red-400',
+  annoyance: 'bg-orange-200 text-orange-900 border-orange-400',
+  disappointment: 'bg-gray-200 text-gray-900 border-gray-400',
+  disapproval: 'bg-slate-200 text-slate-900 border-slate-400',
+  disgust: 'bg-green-200 text-green-900 border-green-400',
+  embarrassment: 'bg-pink-200 text-pink-900 border-pink-400',
+  fear: 'bg-purple-200 text-purple-900 border-purple-400',
+  grief: 'bg-blue-200 text-blue-900 border-blue-400',
+  nervousness: 'bg-violet-200 text-violet-900 border-violet-400',
+  remorse: 'bg-indigo-200 text-indigo-900 border-indigo-400',
   sadness: 'bg-blue-100 text-blue-800 border-blue-300',
-  anger: 'bg-red-100 text-red-800 border-red-300',
-  fear: 'bg-purple-100 text-purple-800 border-purple-300',
-  surprise: 'bg-pink-100 text-pink-800 border-pink-300',
-  disgust: 'bg-green-100 text-green-800 border-green-300',
+  
+  // Ambiguous/neutral
+  confusion: 'bg-amber-100 text-amber-800 border-amber-300',
+  curiosity: 'bg-sky-100 text-sky-800 border-sky-300',
+  desire: 'bg-rose-100 text-rose-800 border-rose-300',
   neutral: 'bg-gray-100 text-gray-800 border-gray-300',
+  realization: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+  surprise: 'bg-fuchsia-100 text-fuchsia-800 border-fuchsia-300',
 };
 
 export default function Journal({ user, onNavigate, onLogout, onOpenNotifications }: JournalProps) {
@@ -84,33 +136,46 @@ export default function Journal({ user, onNavigate, onLogout, onOpenNotification
     setLoading(true);
     setError(null);
     try {
+      const token = localStorage.getItem('token');
       console.log('[Journal] Fetching entries...');
+      console.log('[Journal] Token exists:', !!token);
+      
       const response = await fetch(`${API_BASE}/journal?days=30`, {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
+          Authorization: `Bearer ${token}`,
         },
       });
 
       if (!response.ok) {
+        console.error('[Journal] Fetch failed with status:', response.status);
         throw new Error('Failed to fetch journal entries');
       }
 
       const data = await response.json();
-      const today = new Date().toISOString().split('T')[0];
-      const todayEntries = data.filter((e: JournalEntry) => e.date === today);
+      console.log('[Journal] Raw data received:', data.length, 'entries');
+      console.log('[Journal] All dates in response:', data.map((e: JournalEntry) => e.date));
       
-      console.log(`[Journal] Loaded ${todayEntries.length} entries for today`);
-      setEntries(data);
-
-      // Load most recent entry of today if exists
+      const today = new Date().toISOString().split('T')[0];
+      console.log('[Journal] Today\'s date:', today);
+      
+      const todayEntries = data.filter((e: JournalEntry) => e.date === today);
+      console.log(`[Journal] Filtered to ${todayEntries.length} entries for today`);
+      
       if (todayEntries.length > 0) {
-        const latestToday = todayEntries[todayEntries.length - 1];
-        setContent(latestToday.content);
-        console.log('[Journal] Loaded latest today entry into editor');
+        console.log('[Journal] Today\'s entries:', todayEntries.map((e: JournalEntry) => ({
+          id: e.id,
+          emotion: e.emotion,
+          content_preview: e.content.substring(0, 50)
+        })));
       }
+      
+      setEntries(todayEntries); // Show only today's entries
+      
+      // Always start with a blank editor for new entry
+      setContent('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
-      console.error('Error fetching entries:', err);
+      console.error('[Journal] Error fetching entries:', err);
     } finally {
       setLoading(false);
     }
@@ -132,13 +197,10 @@ export default function Journal({ user, onNavigate, onLogout, onOpenNotification
 
     try {
       const today = new Date().toISOString().split('T')[0];
-      const existingEntry = entries.find((e) => e.date === today);
 
-      const url = existingEntry
-        ? `${API_BASE}/journal/${existingEntry.id}`
-        : `${API_BASE}/journal`;
-
-      const method = existingEntry ? 'PUT' : 'POST';
+      // Always create a new entry
+      const url = `${API_BASE}/journal`;
+      const method = 'POST';
 
       const response = await fetch(url, {
         method,
@@ -168,12 +230,11 @@ export default function Journal({ user, onNavigate, onLogout, onOpenNotification
         console.warn('[Journal] WARNING: Received neutral emotion with low confidence - may indicate ML fallback');
       }
       
-      // Update entries list
-      if (existingEntry) {
-        setEntries(entries.map((e) => (e.id === savedEntry.id ? savedEntry : e)));
-      } else {
-        setEntries([savedEntry, ...entries]);
-      }
+      // Add new entry to the list
+      setEntries([savedEntry, ...entries]);
+      
+      // Clear content for next entry
+      setContent('');
 
       // Show inline feedback using BACKEND response values only
       setSaveFeedback({
@@ -201,50 +262,41 @@ export default function Journal({ user, onNavigate, onLogout, onOpenNotification
       // CRITICAL: Auto-save journal before generating insights if there's content
       const today = new Date().toISOString().split('T')[0];
       if (selectedDate === today && content.trim().length > 0) {
-        const existingEntry = entries.find((e) => e.date === today);
+        console.log('[Journal] Auto-saving journal before generating insights...');
         
-        // Only save if content has changed or no entry exists
-        const needsSave = !existingEntry || existingEntry.content !== content;
-        
-        if (needsSave) {
-          console.log('[Journal] Auto-saving journal before generating insights...');
-          
-          const url = existingEntry
-            ? `${API_BASE}/journal/${existingEntry.id}`
-            : `${API_BASE}/journal`;
-          const method = existingEntry ? 'PUT' : 'POST';
+        // Always create new entry
+        const url = `${API_BASE}/journal`;
+        const method = 'POST';
 
-          const saveResponse = await fetch(url, {
-            method,
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${localStorage.getItem('token')}`,
-            },
-            body: JSON.stringify({
-              content,
-              date: today,
-            }),
-          });
+        const saveResponse = await fetch(url, {
+          method,
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${localStorage.getItem('token')}`,
+          },
+          body: JSON.stringify({
+            content,
+            date: today,
+          }),
+        });
 
-          if (!saveResponse.ok) {
-            throw new Error('Please save your journal entry before generating insights.');
-          }
-
-          const savedEntry = await saveResponse.json();
-          
-          // Update entries list
-          if (existingEntry) {
-            setEntries(entries.map((e) => (e.id === savedEntry.id ? savedEntry : e)));
-          } else {
-            setEntries([savedEntry, ...entries]);
-          }
-          
-          console.log('[Journal] Auto-save successful');
+        if (!saveResponse.ok) {
+          throw new Error('Please save your journal entry before generating insights.');
         }
+
+        const savedEntry = await saveResponse.json();
+        
+        // Add to entries list and clear content
+        setEntries([savedEntry, ...entries]);
+        setContent('');
+        
+        console.log('[Journal] Auto-save successful');
       }
 
       // Now generate the insight
       console.log(`[Journal] Generating reflection for ${selectedDate}...`);
+      console.log(`[Journal] Using regenerate=true to include all ${entries.length} entries from today`);
+      
       const response = await fetch(`${API_BASE}/journal/summarize`, {
         method: 'POST',
         headers: {
@@ -253,7 +305,7 @@ export default function Journal({ user, onNavigate, onLogout, onOpenNotification
         },
         body: JSON.stringify({
           date: selectedDate,
-          regenerate: false,
+          regenerate: true,  // Always regenerate to use latest entries
         }),
       });
 
@@ -264,7 +316,18 @@ export default function Journal({ user, onNavigate, onLogout, onOpenNotification
 
       const insightData = await response.json();
       setInsight(insightData);
-      console.log('[Journal] Reflection generated successfully');
+      
+      // Enhanced logging for insight generation
+      console.log('[Journal] ✅ Reflection generated successfully');
+      console.log('[Journal] 📊 Insight Details:', {
+        date: insightData.date,
+        summary_length: insightData.summary?.summary?.length || 0,
+        dominant_emotions: insightData.summary?.dominant_emotions || [],
+        has_patterns: !!insightData.summary?.patterns,
+        has_positive_signals: !!insightData.summary?.positive_signals,
+        has_gentle_suggestion: !!insightData.summary?.gentle_suggestion
+      });
+      console.log('[Journal] 💡 Gentle Suggestion:', insightData.summary?.gentle_suggestion);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate insight');
       console.error('Error generating insight:', err);
@@ -427,13 +490,13 @@ export default function Journal({ user, onNavigate, onLogout, onOpenNotification
         {/* Previous Entries */}
         <div className="bg-white rounded-2xl shadow-lg p-6">
           <h2 className="text-2xl font-semibold text-gray-800 mb-4">
-            📚 Previous Entries
+            📚 Today's Entries
           </h2>
 
           {loading ? (
             <p className="text-gray-500">Loading entries...</p>
           ) : entries.length === 0 ? (
-            <p className="text-gray-500">No journal entries yet. Start writing!</p>
+            <p className="text-gray-500">No journal entries for today yet. Start writing!</p>
           ) : (
             <div className="space-y-4">
               {entries.map((entry) => (

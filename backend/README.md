@@ -9,9 +9,8 @@ AI-powered mental wellness platform with Ayurvedic intelligence - FastAPI Backen
 - **Database**: Supabase (PostgreSQL + pgvector)
 - **Auth**: Supabase Auth (JWT)
 - **ML Models**:
-  - Embeddings: `sentence-transformers/all-MiniLM-L6-v2`
-  - Emotion Detection: `j-hartmann/emotion-english-distilroberta-base`
-  - Emotion: `j-hartmann/emotion-english-distilroberta-base`
+  - Emotion Detection: `SamLowe/roberta-base-go_emotions` (28 emotions mapped to 7 core emotions)
+  - Emotion: `SamLowe/roberta-base-go_emotions` (go_emotions with 28 fine-grained emotions)
 - **Background Jobs**: RQ (Redis Queue)
 - **Notifications**: Twilio (SMS), SMTP (Email)
 
@@ -121,12 +120,8 @@ Models will auto-download on first run, but you can pre-download:
 ```bash
 python -c "
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
-from sentence_transformers import SentenceTransformer
 
 # Download models
-SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
-AutoTokenizer.from_pretrained('google/flan-t5-base')
-AutoModelForSeq2SeqLM.from_pretrained('google/flan-t5-base')
 "
 ```
 

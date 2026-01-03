@@ -399,6 +399,7 @@ class Notification(BaseModel):
 class RecommendationSource(str, Enum):
     CHAT = "chat"
     DEVICE = "device" 
+    JOURNAL = "journal"
     SYSTEM = "system"
 
 

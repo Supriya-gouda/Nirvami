@@ -7,17 +7,6 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Label mapping from model output to internal emotion names
-LABEL_MAP = {
-    "joy": "joy",
-    "sadness": "sadness",
-    "anger": "anger",
-    "fear": "fear",
-    "surprise": "surprise",
-    "disgust": "disgust",
-    "neutral": "neutral"
-}
-
 
 class EmotionService:
     """Service for detecting and analyzing emotions from text."""
@@ -66,7 +55,7 @@ class EmotionService:
             try:
                 emotion_model = self.model_manager.get_emotion_model()
                 if emotion_model is not None:
-                    ml_result = self._detect_with_ml(text, emotion_model)
+                    ml_result = self._detect_with_ml(text, emotion_model, source)
                     
                     logger.info(f"[EMOTION] ML returned: {ml_result['primary_emotion']} @ {ml_result['confidence']:.2f}")
                     
@@ -86,7 +75,7 @@ class EmotionService:
         logger.warning(f"[EMOTION] ML not available, using rule-based detection")
         return self._detect_with_rules(text)
     
-    def _detect_with_ml(self, text: str, emotion_model) -> Dict:
+    def _detect_with_ml(self, text: str, emotion_model, source: str = "chat") -> Dict:
         """Use ML model for emotion detection with label mapping and normalization."""
         # Log original text length
         logger.info(f"[EMOTION] Text length: {len(text)} chars")
@@ -110,32 +99,46 @@ class EmotionService:
             logger.info(f"[EMOTION] Truncating text from {len(text)} to 2000 chars for ML model")
             text = text[:2000]
         
-        # Run inference
+        # Run inference with go_emotions model
+        logger.info(f"[EMOTION] Using go_emotions model (28 emotions)")
         results = emotion_model(text)[0]
         
-        # Map model labels to internal emotion names and normalize scores
-        mapped_scores = {}
-        for item in results:
-            model_label = item['label'].lower()
-            internal_label = LABEL_MAP.get(model_label, 'neutral')
-            score = float(item['score'])
-            
-            # Aggregate scores if model returns multiple labels for same emotion
-            if internal_label in mapped_scores:
-                mapped_scores[internal_label] = max(mapped_scores[internal_label], score)
-            else:
-                mapped_scores[internal_label] = score
+        # Get all emotion scores from go_emotions (28 labels)
+        emotion_scores = {item['label'].lower(): float(item['score']) for item in results}
         
-        # Get emotion with highest confidence
-        primary_emotion = max(mapped_scores, key=mapped_scores.get)
-        confidence = mapped_scores[primary_emotion]
+        # Get top emotion
+        primary_emotion = max(emotion_scores, key=emotion_scores.get)
+        confidence = emotion_scores[primary_emotion]
+        
+        # Log top 3 emotions
+        top_emotions = sorted(emotion_scores.items(), key=lambda x: x[1], reverse=True)[:3]
+        top_str = ", ".join([f"{e}={s:.2f}" for e, s in top_emotions])
+        logger.info(f"[EMOTION][GO] Detected: {primary_emotion} ({confidence:.2f}) | Top 3: {top_str}")
+        
+        # Apply confidence threshold based on source
+        # Lowered thresholds to capture emotions in short messages
+        # go_emotions model is accurate even at lower confidence scores
+        confidence_threshold = 0.35 if source == "journal" else 0.40
+        
+        logger.info(f"[EMOTION] Confidence threshold for {source}: {confidence_threshold}")
+        
+        if confidence < confidence_threshold:
+            logger.info(f"[EMOTION] Confidence {confidence:.2f} below threshold {confidence_threshold}, using neutral")
+            return {
+                'primary_emotion': 'neutral',
+                'emotion_type': 'neutral',
+                'confidence': 0.5,
+                'emotion_scores': {'neutral': 1.0},
+                'all_scores': {'neutral': 1.0},
+                'source': 'ml'
+            }
         
         return {
             'primary_emotion': primary_emotion,
             'emotion_type': primary_emotion,  # Backward compatibility
             'confidence': confidence,
-            'emotion_scores': mapped_scores,
-            'all_scores': mapped_scores,  # Backward compatibility
+            'emotion_scores': emotion_scores,
+            'all_scores': emotion_scores,  # Backward compatibility
             'source': 'ml'
         }
     
