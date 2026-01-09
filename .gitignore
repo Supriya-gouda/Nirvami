@@ -64,6 +64,13 @@ Thumbs.db
 # ML Models cache
 backend/models_cache/
 
+# Audio files
+backend/songs/
+*.mp3
+*.wav
+*.m4a
+*.flac
+
 # Redis
 dump.rdb
 
