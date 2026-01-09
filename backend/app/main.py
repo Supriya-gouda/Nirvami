@@ -2,9 +2,11 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 import logging
 import os
+from pathlib import Path
 
 from app.config import settings
 from app.api.routes import (
@@ -28,7 +30,9 @@ from app.api.routes import (
     dinacharya,
     recommendations,  # New unified recommendation routes
     notifications,  # Notification routes
-    practice  # Practice tracking routes
+    practice,  # Practice tracking routes
+    media,  # Media serving routes
+    progress_analytics  # Progress analytics routes
 )
 from app.api.routes import wearable_v2  # New simplified wearable routes
 from app.ml.model_manager import ModelManager
@@ -107,6 +111,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Mount static files for music
+songs_path = Path(__file__).parent.parent / "songs"
+if songs_path.exists():
+    app.mount("/songs", StaticFiles(directory=str(songs_path)), name="songs")
+    logger.info(f"✅ Mounted music directory: {songs_path}")
+else:
+    logger.warning(f"⚠️  Music directory not found: {songs_path}")
+
 # Global exception handler
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
@@ -140,6 +152,7 @@ app.include_router(dosha.router, prefix=f"/api/{settings.API_VERSION}/dosha", ta
 app.include_router(yoga.router, prefix=f"/api/{settings.API_VERSION}/yoga", tags=["Yoga & Sound Therapy"])
 app.include_router(recommendations.router, prefix=f"/api/{settings.API_VERSION}/recommendations", tags=["Recommendations"])  # New unified recommendations
 app.include_router(practice.router, prefix=f"/api/{settings.API_VERSION}/practice", tags=["Practice"])  # Practice tracking
+app.include_router(media.router, prefix=f"/api/{settings.API_VERSION}/media", tags=["Media"])  # Media serving
 app.include_router(meals.router, prefix=f"/api/{settings.API_VERSION}/meals", tags=["Meals"])
 app.include_router(routines.router, prefix=f"/api/{settings.API_VERSION}/routines", tags=["Daily Routines"])
 app.include_router(dinacharya.router, prefix=f"/api/{settings.API_VERSION}", tags=["Dinacharya"])
@@ -147,6 +160,7 @@ app.include_router(wearable.router, prefix=f"/api/{settings.API_VERSION}/wearabl
 app.include_router(wearable_v2.router, prefix=f"/api/{settings.API_VERSION}/wearable-v2", tags=["Wearable V2"])  # New clean routes
 app.include_router(watch.router, prefix=f"/api/{settings.API_VERSION}/watch", tags=["Watch"])
 app.include_router(analytics.router, prefix=f"/api/{settings.API_VERSION}/analytics", tags=["Analytics"])
+app.include_router(progress_analytics.router, prefix=f"/api/{settings.API_VERSION}/progress", tags=["Progress Analytics"])
 app.include_router(alerts.router, prefix=f"/api/{settings.API_VERSION}/alerts", tags=["Alerts"])
 app.include_router(notifications.router, prefix=f"/api/{settings.API_VERSION}/notifications", tags=["Notifications"])
 app.include_router(admin.router, prefix=f"/api/{settings.API_VERSION}/admin", tags=["Admin"])

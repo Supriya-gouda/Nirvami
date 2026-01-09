@@ -5,12 +5,15 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Crisis keywords and patterns
+# Crisis keywords - ONLY for genuine suicide/self-harm situations
+# These must be VERY SPECIFIC to avoid false positives
 CRISIS_KEYWORDS = [
-    "suicide", "suicidal", "kill myself", "end my life", "want to die",
-    "better off dead", "no reason to live", "can't go on", "hurt myself",
-    "self harm", "cut myself", "overdose", "end it all", "goodbye world",
-    "final goodbye", "hopeless", "can't take it", "give up"
+    "suicide", "suicidal", "kill myself", "killing myself",
+    "end my life", "ending my life", "want to die", "wanna die",
+    "better off dead", "no reason to live", "can't go on",
+    "hurt myself", "hurting myself", "self harm", "self-harm",
+    "cut myself", "cutting myself", "overdose",
+    "end it all", "goodbye world", "final goodbye"
 ]
 
 DISTRESS_PATTERNS = [
@@ -48,43 +51,23 @@ class CrisisDetector:
         is_crisis = False
         severity = "low"
         
-        # Check for crisis keywords
+        # ONLY check for explicit crisis keywords (suicide, self-harm, etc.)
+        # Do NOT trigger on emotions or patterns - only explicit crisis language
         for keyword in CRISIS_KEYWORDS:
             if keyword in text_lower:
                 triggers.append(f"keyword: {keyword}")
                 is_crisis = True
                 severity = "critical"
+                logger.critical(f"🚨 CRISIS KEYWORD DETECTED: {keyword}")
         
-        # Check patterns
-        if not is_crisis:
-            for pattern in DISTRESS_PATTERNS:
-                if re.search(pattern, text_lower):
-                    triggers.append(f"pattern: {pattern}")
-                    is_crisis = True
-                    severity = "high"
-        
-        # Check emotional state
+        # Log emotion for debugging but DO NOT use it for crisis detection
         if emotion_data:
-            dominant = emotion_data.get("dominant_emotion", "").lower()
+            emotion_type = emotion_data.get("emotion_type") or emotion_data.get("primary_emotion", "").lower()
             confidence = emotion_data.get("confidence", 0)
-            
-            if dominant in HIGH_RISK_EMOTIONS and confidence >= HIGH_RISK_THRESHOLD:
-                triggers.append(f"emotion: {dominant} ({confidence:.2f})")
-                if not is_crisis:
-                    is_crisis = True
-                    severity = "medium"
-        
-        # Check for repeated negative expressions
-        negative_words = ["hopeless", "worthless", "useless", "failure", "alone", "trapped"]
-        negative_count = sum(1 for word in negative_words if word in text_lower)
-        if negative_count >= 3:
-            triggers.append(f"multiple negative expressions ({negative_count})")
-            if not is_crisis:
-                is_crisis = True
-                severity = "medium"
+            logger.info(f"[CRISIS CHECK] Emotion: {emotion_type} @ {confidence:.2f} (info only, not used for crisis detection)")
         
         if is_crisis:
-            logger.warning(f"Crisis detected: severity={severity}, triggers={triggers}")
+            logger.error(f"🚨 CRISIS DETECTED: severity={severity}, triggers={triggers}")
         
         return is_crisis, severity, triggers
     

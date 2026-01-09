@@ -16,14 +16,14 @@ interface MoodInputPopupProps {
 const moodOptions = [
   { value: 'happy', label: 'Happy', emoji: '😊', color: 'from-yellow-400 to-orange-400' },
   { value: 'calm', label: 'Calm', emoji: '😌', color: 'from-blue-400 to-cyan-400' },
-  { value: 'sad', label: 'Sad', emoji: '😢', color: 'from-blue-500 to-indigo-600' },
+  { value: 'sad', label: 'Sad', emoji: '😢', color: 'from-blue-500/85 to-blue-700/85' },
   { value: 'anxious', label: 'Anxious', emoji: '😰', color: 'from-yellow-500 to-red-500' },
   { value: 'tired', label: 'Tired', emoji: '😴', color: 'from-purple-400 to-purple-600' },
-  { value: 'frustrated', label: 'Frustrated', emoji: '😤', color: 'from-orange-500 to-red-600' },
+  { value: 'frustrated', label: 'Frustrated', emoji: '😤', color: 'from-orange-500/85 to-orange-700/85' },
   { value: 'grateful', label: 'Grateful', emoji: '🤗', color: 'from-pink-400 to-rose-400' },
   { value: 'neutral', label: 'Neutral', emoji: '😐', color: 'from-gray-400 to-gray-500' },
-  { value: 'angry', label: 'Angry', emoji: '😡', color: 'from-red-500 to-red-700' },
-  { value: 'low-energy', label: 'Low Energy', emoji: '😔', color: 'from-indigo-400 to-indigo-600' },
+  { value: 'angry', label: 'Angry', emoji: '😡', color: 'from-red-600/85 to-red-800/85' },
+  { value: 'low-energy', label: 'Low Energy', emoji: '😔', color: 'from-slate-500/85 to-slate-700/85' },
   { value: 'energized', label: 'Energized', emoji: '⚡', color: 'from-yellow-300 to-amber-400' },
   { value: 'confused', label: 'Confused', emoji: '😕', color: 'from-purple-500 to-indigo-700' },
 ];
@@ -89,38 +89,38 @@ export function MoodInputPopup({ isOpen, onClose, onMoodSubmitted }: MoodInputPo
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-2xl flex items-center gap-2">
-            <Smile className="w-6 h-6 text-purple-600" />
+          <DialogTitle className="text-xl flex items-center gap-2">
+            <Smile className="w-5 h-5 text-purple-600" />
             How are you feeling right now?
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-xs">
             Take a moment to check in with yourself. Your mood helps us personalize your wellness journey.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6 py-4">
+        <div className="space-y-4 py-2">
           {/* Mood Selection */}
           <div>
-            <label className="text-sm font-medium text-gray-700 mb-3 block">
+            <label className="text-sm font-medium text-gray-700 mb-2 block">
               Select your mood
             </label>
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-4 gap-2">
               {moodOptions.map((mood) => (
                 <motion.button
                   key={mood.value}
                   onClick={() => setSelectedMood(mood.value)}
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
-                  className={`p-4 rounded-xl border-2 transition-all ${
+                  className={`p-3 rounded-xl border-2 transition-all aspect-square flex flex-col items-center justify-center ${
                     selectedMood === mood.value
                       ? `border-purple-500 bg-gradient-to-br ${mood.color} text-white shadow-lg`
                       : 'border-gray-200 hover:border-purple-300 bg-white'
                   }`}
                 >
-                  <div className="text-3xl mb-2">{mood.emoji}</div>
-                  <div className="text-sm font-medium">{mood.label}</div>
+                  <div className="text-2xl mb-1">{mood.emoji}</div>
+                  <div className="text-xs font-medium">{mood.label}</div>
                 </motion.button>
               ))}
             </div>
@@ -131,7 +131,7 @@ export function MoodInputPopup({ isOpen, onClose, onMoodSubmitted }: MoodInputPo
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="space-y-3"
+              className="space-y-2"
             >
               <div className="flex items-center justify-between">
                 <label className="text-sm font-medium text-gray-700">
@@ -165,7 +165,7 @@ export function MoodInputPopup({ isOpen, onClose, onMoodSubmitted }: MoodInputPo
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.05 }}
-              className="space-y-3"
+              className="space-y-2"
             >
               <div className="flex items-center justify-between">
                 <label className="text-sm font-medium text-gray-700">
@@ -202,7 +202,7 @@ export function MoodInputPopup({ isOpen, onClose, onMoodSubmitted }: MoodInputPo
           )}
 
           {/* Submit Button */}
-          <div className="flex gap-3 pt-4">
+          <div className="flex gap-3 pt-2">
             <Button
               type="button"
               variant="outline"

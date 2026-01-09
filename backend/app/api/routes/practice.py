@@ -1,16 +1,28 @@
 """Practice session routes for tracking user practice completions."""
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Body
 from app.models.schemas import PracticeSession, PracticeContent, PracticeStreak
 from app.utils.auth import get_current_user_id
 from app.utils.database import get_supabase
 from typing import List, Optional
 from datetime import datetime, timedelta
+from pydantic import BaseModel
 import logging
 import uuid
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+class CreatePracticeSessionRequest(BaseModel):
+    practice_type: str
+    practice_name: str
+    duration_minutes: int
+    recommendation_id: Optional[str] = None
+    completion_status: str = "completed"
+    notes: Optional[str] = None
+    difficulty_rating: Optional[int] = None
+    satisfaction_rating: Optional[int] = None
 
 
 @router.get("/content/{practice_name}")
@@ -68,48 +80,90 @@ async def get_practice_content(
 
 @router.post("/sessions")
 async def create_practice_session(
-    practice_type: str,
-    practice_name: str,
-    duration_minutes: int,
-    recommendation_id: Optional[str] = None,
-    completion_status: str = "completed",
-    notes: Optional[str] = None,
-    difficulty_rating: Optional[int] = None,
-    satisfaction_rating: Optional[int] = None,
-    current_user_id: str = Depends(get_current_user_id),
-    supabase=Depends(get_supabase)
+    request: CreatePracticeSessionRequest = Body(...),
+    current_user_id: str = Depends(get_current_user_id)
 ):
     """Log a completed practice session."""
     try:
+        # Use service role to bypass RLS for practice session creation
+        from app.utils.database import get_supabase
+        supabase = get_supabase(use_service_role=True)
+        
+        logger.info(f"📝 Creating practice session for user {current_user_id}: {request.practice_type} - {request.practice_name}")
+        
+        # Prepare session data with proper None handling
         session_data = {
             "id": str(uuid.uuid4()),
             "user_id": current_user_id,
-            "recommendation_id": recommendation_id,
-            "practice_type": practice_type,
-            "practice_name": practice_name,
-            "duration_minutes": duration_minutes,
+            "practice_type": request.practice_type,
+            "practice_name": request.practice_name,
+            "duration_minutes": request.duration_minutes,
             "completed_at": datetime.utcnow().isoformat(),
-            "completion_status": completion_status,
-            "notes": notes,
-            "difficulty_rating": difficulty_rating,
-            "satisfaction_rating": satisfaction_rating
+            "completion_status": request.completion_status,
         }
+        
+        # Only add optional fields if they have values
+        if request.recommendation_id:
+            session_data["recommendation_id"] = request.recommendation_id
+        if request.notes:
+            session_data["notes"] = request.notes
+        if request.difficulty_rating:
+            session_data["difficulty_rating"] = request.difficulty_rating
+        if request.satisfaction_rating:
+            session_data["satisfaction_rating"] = request.satisfaction_rating
         
         result = supabase.table("practice_sessions").insert(session_data).execute()
         
         if not result.data:
+            logger.error(f"❌ Failed to insert practice session to database")
             raise HTTPException(status_code=500, detail="Failed to create practice session")
         
-        logger.info(f"Created practice session for user {current_user_id}: {practice_name}")
+        logger.info(f"✅ Practice Stored: {session_data['id']}")
+        
+        # Mark recommendation as completed if recommendation_id provided
+        if request.recommendation_id:
+            try:
+                # First, get the current recommendation to preserve existing meta
+                rec_result = supabase.table("recommendations").select("meta").eq("id", request.recommendation_id).execute()
+                
+                current_meta = {}
+                if rec_result.data and len(rec_result.data) > 0:
+                    current_meta = rec_result.data[0].get("meta", {}) or {}
+                
+                # Merge with new completion data
+                updated_meta = {
+                    **current_meta,
+                    "completed": True,
+                    "completed_at": datetime.utcnow().isoformat(),
+                    "practice_session_id": session_data["id"]
+                }
+                
+                # Update recommendation with merged meta AND mark Completed column as YES
+                update_result = supabase.table("recommendations").update({
+                    "meta": updated_meta,
+                    "Completed": "YES"
+                }).eq("id", request.recommendation_id).execute()
+                
+                if update_result.data:
+                    logger.info(f"✅ Marked recommendation {request.recommendation_id} as completed (Completed=YES)")
+                else:
+                    logger.warning(f"⚠️ Could not mark recommendation {request.recommendation_id} as completed")
+            except Exception as rec_error:
+                logger.warning(f"⚠️ Failed to mark recommendation as completed: {rec_error}")
+                # Non-critical, don't fail the request
+        
+        logger.info(f"✅ Created practice session for user {current_user_id}: {request.practice_name}")
         
         return {
             "success": True,
             "session": result.data[0],
-            "message": f"Practice session '{practice_name}' logged successfully!"
+            "message": f"Practice session '{request.practice_name}' logged successfully!"
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error creating practice session: {e}", exc_info=True)
+        logger.error(f"❌ Error creating practice session: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error creating practice session: {str(e)}")
 
 
@@ -286,3 +340,61 @@ async def get_wellness_contribution(
     except Exception as e:
         logger.error(f"Error calculating wellness contribution: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error calculating wellness contribution: {str(e)}")
+
+
+@router.get("/completion-summary")
+async def get_completion_summary(
+    current_user_id: str = Depends(get_current_user_id),
+    supabase=Depends(get_supabase)
+):
+    """Get user's completion summary based on practice sessions."""
+    try:
+        # Get all completed practice sessions
+        result = supabase.table("practice_sessions")\
+            .select("*")\
+            .eq("user_id", current_user_id)\
+            .eq("completion_status", "completed")\
+            .order("completed_at", desc=True)\
+            .execute()
+        
+        sessions = result.data or []
+        
+        if not sessions:
+            return {
+                "success": True,
+                "summary": {
+                    "daily_completed_count": 0,
+                    "last_completion_date": None,
+                    "current_streak": 0,
+                    "longest_streak": 0,
+                    "lifetime_total_completed": 0
+                }
+            }
+        
+        # Calculate statistics from practice sessions
+        from datetime import datetime, timedelta
+        today = datetime.utcnow().date()
+        
+        # Count today's completions
+        today_count = sum(1 for s in sessions if datetime.fromisoformat(s['completed_at'].replace('Z', '+00:00')).date() == today)
+        
+        # Get last completion date
+        last_completion = datetime.fromisoformat(sessions[0]['completed_at'].replace('Z', '+00:00')).date()
+        
+        # Calculate streak (simplified)
+        current_streak = 1 if last_completion >= today - timedelta(days=1) else 0
+        
+        return {
+            "success": True,
+            "summary": {
+                "daily_completed_count": today_count,
+                "last_completion_date": last_completion.isoformat(),
+                "current_streak": current_streak,
+                "longest_streak": current_streak,
+                "lifetime_total_completed": len(sessions)
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error fetching completion summary: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error fetching completion summary: {str(e)}")

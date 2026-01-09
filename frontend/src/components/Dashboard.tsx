@@ -79,15 +79,18 @@ export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications, onR
         setLoading(true);
 
         // Fetch all data in parallel including dynamic aura from latest emotion
-        const [wellness, aura, dosha, emotions, streakData, wearable, latestAura, analysisRecs] = await Promise.all([
-          api.getTodayWellness().catch(() => null),
+        const [dashboardMetrics, aura, dosha, emotions, recordResult, wearable, latestAura, analysisRecs] = await Promise.all([
+          api.getDashboardMetrics().catch(() => null), // Get wellness score from same endpoint as Progress page
           api.getTodayAura().catch(() => null),
           api.getLatestDosha().catch(() => null),
           api.getEmotionLogs({
             start_date: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0],
             end_date: new Date().toISOString().split('T')[0]
           }).catch(() => []),
-          api.recordVisit().catch(() => ({ ok: true, current_streak: 0 })),
+          api.recordVisit().catch((err) => {
+            console.error('❌ Failed to record visit:', err);
+            return { ok: false, current_streak: 0, longest_streak: 0 };
+          }),
           api.getLatestWearableData().catch((err) => {
             console.error('Error fetching wearable data:', err);
             return { hasData: false, steps: 0, sleepHours: 0, heartRate: 0, stressLevel: 0 };
@@ -96,14 +99,41 @@ export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications, onR
           api.getRecommendationsGroupedBySource().catch(() => ({ device: [], chat: [], system: [] })), // Get today's analysis
         ]);
 
-        setWellnessData(wellness);
+        // Use wellness score from dashboard metrics (same as Progress page)
+        if (dashboardMetrics?.wellness_score !== null && dashboardMetrics?.wellness_score !== undefined) {
+          setWellnessData({
+            overall_score: dashboardMetrics.wellness_score,
+            emotion_score: dashboardMetrics.wellness_score,
+            physical_score: 0,
+            consistency_score: 0
+          } as WellnessScore);
+        } else {
+          setWellnessData(null);
+        }
         setAuraData(aura);
         setDoshaData(dosha);
         setRecentEmotions(emotions);
         setWearableSummary(wearable || { hasData: false, steps: 0, sleepHours: 0, heartRate: 0, stressLevel: 0 });
-        // Handle both old and new response formats
-        setStreak(streakData?.current_streak || 0);
-        setLongestStreak(streakData?.longest_streak || 0);
+        
+        // Update streak from record-visit response
+        if (recordResult?.ok) {
+          console.log('✅ Visit recorded:', recordResult);
+          setStreak(recordResult.current_streak || 0);
+          setLongestStreak(recordResult.longest_streak || 0);
+        } else {
+          console.warn('⚠️ Visit recording failed, fetching current streak...');
+          // Fallback: fetch current streak if recording failed
+          try {
+            const currentStreak = await api.getCurrentStreak();
+            setStreak(currentStreak?.current_streak || 0);
+            setLongestStreak(currentStreak?.longest_streak || 0);
+          } catch (err) {
+            console.error('❌ Failed to fetch current streak:', err);
+            setStreak(0);
+            setLongestStreak(0);
+          }
+        }
+        
         setDynamicAura(latestAura); // Apply dynamic aura gradient and text based on backend response
         
         // Separate device recommendations by data source (manual vs watch)
@@ -450,7 +480,7 @@ export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications, onR
             className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-white/50"
           >
             <div className="flex items-center gap-3 mb-4">
-              <div className="p-3 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-xl">
+              <div className="p-3 rounded-xl" style={{ backgroundColor: '#8b5cf6' }}>
                 <Heart className="w-6 h-6 text-white" />
               </div>
               <div>
@@ -503,31 +533,15 @@ export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications, onR
             whileHover={{ scale: 1.02 }}
             className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-white/50"
           >
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="p-3 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl">
-                  <Activity className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Wellness Score</p>
-                  <p className="text-3xl font-bold text-gray-800">
-                    {wellnessData ? Math.round(wellnessData.overall_score) : 0}
-                  </p>
-                </div>
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl">
+                <Activity className="w-6 h-6 text-white" />
               </div>
-            </div>
-            <div className="space-y-2">
-              <div className="flex justify-between text-xs">
-                <span className="text-gray-600">Emotional</span>
-                <span className="font-medium">{wellnessData ? Math.round(wellnessData.emotion_score) : 0}%</span>
-              </div>
-              <div className="flex justify-between text-xs">
-                <span className="text-gray-600">Physical</span>
-                <span className="font-medium">{wellnessData ? Math.round(wellnessData.wearable_score) : 0}%</span>
-              </div>
-              <div className="flex justify-between text-xs">
-                <span className="text-gray-600">Mental</span>
-                <span className="font-medium">{wellnessData ? Math.round(wellnessData.engagement_score) : 0}%</span>
+              <div>
+                <p className="text-sm text-gray-600">Wellness Score</p>
+                <p className="text-3xl font-bold text-gray-800">
+                  {wellnessData ? wellnessData.overall_score.toFixed(1) : 0}
+                </p>
               </div>
             </div>
           </motion.div>
@@ -559,21 +573,21 @@ export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications, onR
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.3 }}
             whileHover={{ scale: 1.02 }}
-            className={`bg-gradient-to-br ${currentAura.bgGradient} backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-white/50`}
+            className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-white/50"
           >
             <div className="flex items-center gap-3 mb-4">
-              <div className={`p-3 bg-gradient-to-br ${currentAura.innerGlow} rounded-xl`}>
+              <div className="p-3 rounded-xl" style={{ backgroundColor: '#8b5cf6' }}>
                 <Sparkles className="w-6 h-6 text-white" />
               </div>
               <div>
                 <p className="text-sm text-gray-600">Aura Energy</p>
                 <p className="text-3xl font-bold text-gray-800">
-                  {auraData ? Math.min(Math.round(auraData.intensity * 100), 100) : 0}%
+                  {latestEmotion?.intensity ? Math.round(latestEmotion.intensity * 10) : 0}%
                 </p>
               </div>
             </div>
             <p className="text-xs text-gray-600">
-              {auraData?.color_code ? `${auraData.color_code.charAt(0).toUpperCase()}${auraData.color_code.slice(1)} aura detected` : 'No aura data'}
+              {latestEmotion?.emotion_type || latestEmotion?.emotion || 'No mood logged'}
             </p>
           </motion.div>
         </div>
@@ -588,7 +602,7 @@ export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications, onR
           <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-white/50">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
-                <div className="p-3 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl">
+                <div className="p-3 rounded-xl" style={{ backgroundColor: '#0ea5e9' }}>
                   <Activity className="w-6 h-6 text-white" />
                 </div>
                 <div>
@@ -1008,7 +1022,7 @@ export function Dashboard({ user, onNavigate, onLogout, onOpenNotifications, onR
               {/* Aura Information */}
               <div className="space-y-6">
                 <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-5 border border-white/50">
-                  <Badge className={`bg-gradient-to-r ${currentAura.gradient} text-white mb-2`}>
+                  <Badge className="text-white mb-2" style={{ backgroundColor: '#ef4444' }}>
                     {currentAura.name}
                   </Badge>
                   <h3 className="text-lg text-gray-800 mb-2">

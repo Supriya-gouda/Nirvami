@@ -374,12 +374,24 @@ STRICT REQUIREMENTS:
    ✅ REQUIRED: "You used breathing and short breaks to manage stress" (only if mentioned)
    If NO coping actions mentioned: "You're maintaining awareness of your emotional state"
 
-5. GENTLE_SUGGESTION: Must directly address the DOMINANT EMOTIONS:
-   - {dominant_emotions[0]} → specific grounding/pacing techniques
-   - anger → release, pause practices
-   - sadness → gentle support, rest
-   ❌ NOT ALLOWED: "Add more details next time"
-   ✅ REQUIRED: "Since {dominant_emotions[0]} and {dominant_emotions[1] if len(dominant_emotions) > 1 else 'intensity'} appeared repeatedly, short grounding practices during the afternoon may help prevent emotional buildup"
+5. GENTLE_SUGGESTION: Provide 2 specific, actionable mood-lifting tips based on the DOMINANT EMOTIONS.
+   Focus on shifting from negative to positive emotions with practical techniques:
+   
+   For negative emotions (sadness, anger, fear, anxiety, stress):
+   Tip 1: A quick physical activity or sensory practice (5-10 min)
+   Tip 2: A mindful mental shift or gratitude practice
+   
+   Examples based on emotion:
+   - sadness → Tip 1: "Step outside for 5 minutes of sunlight and fresh air" | Tip 2: "Write down one thing that made you smile this week"
+   - anger → Tip 1: "Do 10 deep breaths while clenching and releasing your fists" | Tip 2: "Think of someone who makes you feel calm and imagine their presence"
+   - fear/anxiety → Tip 1: "Place both feet firmly on the ground and name 5 things you can see" | Tip 2: "Remind yourself of one challenge you overcame in the past"
+   - stress → Tip 1: "Stretch your arms overhead for 30 seconds and roll your shoulders" | Tip 2: "List 3 small things that are going well today"
+   
+   For neutral/positive emotions: Provide energy-boosting or joy-enhancing tips
+   
+   Format: "💡 Tip 1: [specific action] 💡 Tip 2: [specific practice]"
+   ❌ NOT ALLOWED: Generic advice, "Add more details", future-focused suggestions
+   ✅ REQUIRED: Two concrete, immediately actionable tips that help lighten mood NOW
 
 Return ONLY valid JSON:
 {{

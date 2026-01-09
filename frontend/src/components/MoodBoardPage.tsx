@@ -278,6 +278,7 @@ export function MoodBoardPage({ user, onNavigate }: ManualInputPageProps) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="text-center">Mood Saved! ✨</DialogTitle>
+            <DialogDescription className="text-center">Your mood has been recorded successfully</DialogDescription>
           </DialogHeader>
           <div className="flex justify-center py-6">
             <motion.div
@@ -297,6 +298,7 @@ export function MoodBoardPage({ user, onNavigate }: ManualInputPageProps) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Wellness Recommendation</DialogTitle>
+            <DialogDescription>Based on your current mood, we suggest the following practice</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 pt-4">
             <div className="bg-gradient-to-r from-purple-50 to-blue-50 p-6 rounded-lg">

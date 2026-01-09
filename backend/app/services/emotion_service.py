@@ -1,7 +1,7 @@
 """Emotion detection and analysis service."""
 import logging
 from typing import Dict, List, Optional, Tuple
-from datetime import datetime
+from datetime import datetime, date, timedelta
 import uuid
 from app.config import settings
 
@@ -10,6 +10,27 @@ logger = logging.getLogger(__name__)
 
 class EmotionService:
     """Service for detecting and analyzing emotions from text."""
+    
+    # Emotion classification buckets for trend analysis
+    POSITIVE_EMOTIONS = {
+        'joy', 'happy', 'happiness', 'joyful', 'excited', 'excitement', 
+        'calm', 'peaceful', 'relaxed', 'motivated', 'grateful', 'gratitude',
+        'confident', 'confident', 'love', 'loved', 'content', 'satisfied',
+        'hopeful', 'optimistic', 'proud', 'relief', 'relieved', 'inspired'
+    }
+    
+    NEGATIVE_EMOTIONS = {
+        'sad', 'sadness', 'sorrow', 'anger', 'angry', 'frustrated', 'frustration',
+        'fear', 'fearful', 'afraid', 'anxiety', 'anxious', 'worried', 'stress',
+        'stressed', 'guilt', 'guilty', 'shame', 'ashamed', 'overwhelmed',
+        'depressed', 'depression', 'lonely', 'loneliness', 'disgust', 'disgusted',
+        'jealous', 'jealousy', 'resentment', 'resentful', 'irritated', 'annoyed'
+    }
+    
+    NEUTRAL_EMOTIONS = {
+        'neutral', 'okay', 'fine', 'normal', 'indifferent', 'blank',
+        'surprise', 'surprised', 'curious', 'confused', 'bored', 'tired'
+    }
     
     def __init__(self, model_manager=None):
         """
@@ -29,7 +50,7 @@ class EmotionService:
         
         ML-first approach:
         1. Try ML model if enabled and available
-        2. Check confidence threshold (lower for journals: 0.40, higher for chat: 0.55)
+        2. Check confidence threshold (lower for journals: 0.35, default for chat: 0.45)
         3. Fallback to rules if ML fails or confidence too low
         
         Args:
@@ -44,9 +65,9 @@ class EmotionService:
         if min_confidence is not None:
             confidence_threshold = min_confidence
         elif source == "journal":
-            confidence_threshold = 0.40  # Lower threshold for reflective journal text
+            confidence_threshold = 0.35  # Lower threshold for reflective journal text
         else:
-            confidence_threshold = settings.EMOTION_CONFIDENCE_THRESHOLD  # 0.55 for chat
+            confidence_threshold = settings.EMOTION_CONFIDENCE_THRESHOLD  # 0.45 for chat (from config)
         
         logger.info(f"[EMOTION] Detecting emotion for {source} (threshold: {confidence_threshold})")
         
@@ -80,8 +101,8 @@ class EmotionService:
         # Log original text length
         logger.info(f"[EMOTION] Text length: {len(text)} chars")
         
-        # Validate text
-        if len(text.strip()) < 10:
+        # Validate text - allow short messages (minimum 3 chars for model)
+        if len(text.strip()) < 3:
             logger.warning(f"[EMOTION] Text too short ({len(text)} chars), returning neutral")
             return {
                 'primary_emotion': 'neutral',
@@ -115,23 +136,16 @@ class EmotionService:
         top_str = ", ".join([f"{e}={s:.2f}" for e, s in top_emotions])
         logger.info(f"[EMOTION][GO] Detected: {primary_emotion} ({confidence:.2f}) | Top 3: {top_str}")
         
-        # Apply confidence threshold based on source
-        # Lowered thresholds to capture emotions in short messages
-        # go_emotions model is accurate even at lower confidence scores
-        confidence_threshold = 0.35 if source == "journal" else 0.40
-        
-        logger.info(f"[EMOTION] Confidence threshold for {source}: {confidence_threshold}")
-        
-        if confidence < confidence_threshold:
-            logger.info(f"[EMOTION] Confidence {confidence:.2f} below threshold {confidence_threshold}, using neutral")
-            return {
-                'primary_emotion': 'neutral',
-                'emotion_type': 'neutral',
-                'confidence': 0.5,
-                'emotion_scores': {'neutral': 1.0},
-                'all_scores': {'neutral': 1.0},
-                'source': 'ml'
-            }
+        # Post-processing: If ML detected "neutral" but text has strong emotion keywords,
+        # check for keyword-based override (prevents false neutrals)
+        if primary_emotion == 'neutral' and confidence < 0.70:
+            text_lower = text.lower()
+            keyword_override = self._check_keyword_override(text_lower, emotion_scores)
+            if keyword_override:
+                logger.info(f"[EMOTION] Overriding neutral with keyword-based: {keyword_override['emotion']} (found: {keyword_override['keywords']})")
+                primary_emotion = keyword_override['emotion']
+                # Boost confidence for keyword match
+                confidence = max(emotion_scores.get(primary_emotion, 0.5), 0.60)
         
         return {
             'primary_emotion': primary_emotion,
@@ -141,6 +155,29 @@ class EmotionService:
             'all_scores': emotion_scores,  # Backward compatibility
             'source': 'ml'
         }
+    
+    def _check_keyword_override(self, text_lower: str, emotion_scores: Dict) -> Optional[Dict]:
+        """Check if text contains strong emotion keywords that should override neutral."""
+        # Strong emotion keywords that should override neutral detection
+        keyword_map = {
+            'nervousness': ['stressed', 'stress', 'anxious', 'anxiety', 'tensed', 'tense', 'overwhelmed'],
+            'fear': ['afraid', 'scared', 'terrified', 'panic'],
+            'sadness': ['sad', 'depressed', 'miserable', 'devastated', 'hopeless'],
+            'anger': ['angry', 'furious', 'enraged', 'outraged'],
+            'joy': ['happy', 'excited', 'delighted', 'thrilled'],
+            'annoyance': ['annoyed', 'irritated', 'frustrated'],
+        }
+        
+        for emotion, keywords in keyword_map.items():
+            found_keywords = [kw for kw in keywords if kw in text_lower]
+            if found_keywords:
+                # Return the emotion with highest score from alternatives
+                return {
+                    'emotion': emotion,
+                    'keywords': found_keywords
+                }
+        
+        return None
     
     def detect_contextual_emotion(self, texts: List[str]) -> Dict:
         """
@@ -177,12 +214,12 @@ class EmotionService:
         
         # Keyword-based detection
         emotion_keywords = {
-            'joy': ['happy', 'joy', 'excited', 'great', 'wonderful', 'amazing', 'love', 'excellent'],
-            'sadness': ['sad', 'depressed', 'down', 'unhappy', 'miserable', 'lonely', 'crying'],
-            'anger': ['angry', 'mad', 'furious', 'annoyed', 'frustrated', 'irritated'],
-            'fear': ['afraid', 'scared', 'anxious', 'worried', 'nervous', 'panic', 'terrified'],
-            'surprise': ['surprised', 'shocked', 'amazed', 'astonished', 'unexpected'],
-            'disgust': ['disgusted', 'gross', 'awful', 'terrible', 'horrible'],
+            'joy': ['happy', 'joy', 'excited', 'great', 'wonderful', 'amazing', 'love', 'excellent', 'delighted', 'cheerful', 'thrilled'],
+            'sadness': ['sad', 'depressed', 'down', 'unhappy', 'miserable', 'lonely', 'crying', 'disappointed', 'hopeless', 'devastated'],
+            'anger': ['angry', 'mad', 'furious', 'annoyed', 'frustrated', 'irritated', 'outraged', 'enraged'],
+            'fear': ['afraid', 'scared', 'anxious', 'worried', 'nervous', 'panic', 'terrified', 'tensed', 'tense', 'stressed', 'stress', 'overwhelmed', 'concern', 'concerned', 'uneasy', 'apprehensive'],
+            'surprise': ['surprised', 'shocked', 'amazed', 'astonished', 'unexpected', 'startled'],
+            'disgust': ['disgusted', 'gross', 'awful', 'terrible', 'horrible', 'revolting'],
         }
         
         scores = {'neutral': 0.5}
@@ -286,6 +323,253 @@ class EmotionService:
             'average_valence': total_valence / total,
             'total_entries': total
         }
+    
+    def classify_emotion(self, emotion: str) -> str:
+        """
+        Classify an emotion into positive, negative, or neutral bucket.
+        
+        Args:
+            emotion: Emotion string (e.g., 'joy', 'sad', 'neutral')
+            
+        Returns:
+            Classification: 'positive', 'negative', or 'neutral'
+        """
+        emotion_lower = emotion.lower().strip()
+        
+        if emotion_lower in self.POSITIVE_EMOTIONS:
+            return 'positive'
+        elif emotion_lower in self.NEGATIVE_EMOTIONS:
+            return 'negative'
+        else:
+            return 'neutral'
+    
+    def compute_daily_emotion_summary(self, emotion_logs: List[Dict], target_date: date) -> Dict:
+        """
+        Compute daily emotion percentages using confidence-weighted sums.
+        
+        This method implements the emotion trend logic:
+        1. Filter emotions for the target date
+        2. Classify each emotion into positive/negative/neutral
+        3. Weight by confidence score
+        4. Calculate percentages that sum to 100%
+        
+        Args:
+            emotion_logs: List of emotion log entries for the day
+            target_date: The date to compute summary for
+            
+        Returns:
+            Dict with positive_percent, negative_percent, neutral_percent,
+            and total_weighted_count
+        """
+        if not emotion_logs:
+            # Return balanced neutral state if no emotions logged
+            return {
+                'positive_percent': 0.0,
+                'negative_percent': 0.0,
+                'neutral_percent': 100.0,
+                'total_weighted_count': 0.0
+            }
+        
+        # Initialize weighted sums
+        positive_weighted = 0.0
+        negative_weighted = 0.0
+        neutral_weighted = 0.0
+        
+        # Process each emotion log
+        for log in emotion_logs:
+            emotion_type = log.get('emotion_type', 'neutral')
+            confidence = float(log.get('confidence', 0.5))
+            
+            # Classify and add weighted score
+            classification = self.classify_emotion(emotion_type)
+            
+            if classification == 'positive':
+                positive_weighted += confidence
+            elif classification == 'negative':
+                negative_weighted += confidence
+            else:
+                neutral_weighted += confidence
+        
+        # Calculate total
+        total_weighted = positive_weighted + negative_weighted + neutral_weighted
+        
+        if total_weighted == 0:
+            # Shouldn't happen but handle edge case
+            return {
+                'positive_percent': 0.0,
+                'negative_percent': 0.0,
+                'neutral_percent': 100.0,
+                'total_weighted_count': 0.0
+            }
+        
+        # Calculate percentages (sum = 100%)
+        positive_percent = (positive_weighted / total_weighted) * 100.0
+        negative_percent = (negative_weighted / total_weighted) * 100.0
+        neutral_percent = (neutral_weighted / total_weighted) * 100.0
+        
+        # Round to 2 decimal places
+        positive_percent = round(positive_percent, 2)
+        negative_percent = round(negative_percent, 2)
+        neutral_percent = round(neutral_percent, 2)
+        
+        # Ensure exact sum of 100.00 by adjusting the largest component
+        total_percent = positive_percent + negative_percent + neutral_percent
+        
+        if abs(total_percent - 100.0) > 0.001:
+            # Find the largest component and adjust it
+            max_val = max(positive_percent, negative_percent, neutral_percent)
+            adjustment = 100.0 - total_percent
+            
+            if positive_percent == max_val:
+                positive_percent = round(positive_percent + adjustment, 2)
+            elif negative_percent == max_val:
+                negative_percent = round(negative_percent + adjustment, 2)
+            else:
+                neutral_percent = round(neutral_percent + adjustment, 2)
+        
+        return {
+            'positive_percent': positive_percent,
+            'negative_percent': negative_percent,
+            'neutral_percent': neutral_percent,
+            'total_weighted_count': round(total_weighted, 2)
+        }
+    
+    def store_daily_emotion_summary(
+        self,
+        supabase,
+        user_id: str,
+        target_date: date,
+        summary: Dict
+    ) -> Dict:
+        """
+        Store or update daily emotion summary in database.
+        
+        Dynamic updating rule:
+        - If date == today: always update (upsert)
+        - If date < today: only create if doesn't exist (don't update past)
+        
+        Args:
+            supabase: Supabase client
+            user_id: User ID
+            target_date: Date for the summary
+            summary: Computed summary dict with percentages
+            
+        Returns:
+            Stored summary record
+        """
+        today = date.today()
+        date_str = target_date.isoformat()
+        
+        # Check if record exists
+        existing = supabase.table("daily_emotion_summary")\
+            .select("*")\
+            .eq("user_id", user_id)\
+            .eq("date", date_str)\
+            .execute()
+        
+        record_exists = existing.data and len(existing.data) > 0
+        
+        # Prepare data
+        summary_data = {
+            'user_id': user_id,
+            'date': date_str,
+            'positive_percent': summary['positive_percent'],
+            'negative_percent': summary['negative_percent'],
+            'neutral_percent': summary['neutral_percent'],
+            'total_weighted_count': summary['total_weighted_count'],
+            'updated_at': datetime.utcnow().isoformat()
+        }
+        
+        # Dynamic updating logic
+        if target_date == today:
+            # Today: always update
+            if record_exists:
+                # Update existing record
+                result = supabase.table("daily_emotion_summary")\
+                    .update(summary_data)\
+                    .eq("user_id", user_id)\
+                    .eq("date", date_str)\
+                    .execute()
+                logger.info(f"Updated emotion summary for today: {date_str}")
+            else:
+                # Insert new record
+                result = supabase.table("daily_emotion_summary")\
+                    .insert(summary_data)\
+                    .execute()
+                logger.info(f"Created emotion summary for today: {date_str}")
+        else:
+            # Past date: only create if doesn't exist
+            if not record_exists:
+                result = supabase.table("daily_emotion_summary")\
+                    .insert(summary_data)\
+                    .execute()
+                logger.info(f"Created emotion summary for past date: {date_str}")
+            else:
+                # Don't update past dates
+                logger.info(f"Skipping update for past date: {date_str} (already exists)")
+                result = existing
+        
+        return result.data[0] if result.data else None
+    
+    def update_emotion_trends(
+        self,
+        supabase,
+        user_id: str,
+        start_date: date,
+        end_date: date
+    ) -> List[Dict]:
+        """
+        Update emotion trends for a date range by computing daily summaries.
+        
+        This is useful for:
+        - Backfilling historical data
+        - Recalculating today's trends
+        - Batch processing
+        
+        Args:
+            supabase: Supabase client
+            user_id: User ID
+            start_date: Start date (inclusive)
+            end_date: End date (inclusive)
+            
+        Returns:
+            List of daily emotion summaries
+        """
+        summaries = []
+        current_date = start_date
+        
+        while current_date <= end_date:
+            date_str = current_date.isoformat()
+            next_date_str = (current_date + timedelta(days=1)).isoformat()
+            
+            # Fetch all emotions for this day
+            emotion_logs = supabase.table("emotion_logs")\
+                .select("*")\
+                .eq("user_id", user_id)\
+                .gte("created_at", f"{date_str}T00:00:00")\
+                .lt("created_at", f"{next_date_str}T00:00:00")\
+                .execute()
+            
+            # Compute summary
+            summary = self.compute_daily_emotion_summary(
+                emotion_logs.data or [],
+                current_date
+            )
+            
+            # Store summary
+            if summary['total_weighted_count'] > 0:  # Only store if there are emotions
+                stored = self.store_daily_emotion_summary(
+                    supabase,
+                    user_id,
+                    current_date,
+                    summary
+                )
+                if stored:
+                    summaries.append(stored)
+            
+            current_date += timedelta(days=1)
+        
+        return summaries
 
 
 def get_emotion_service(model_manager=None):

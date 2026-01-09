@@ -218,11 +218,11 @@ class ApiService {
 
     this.saveAuth(data.session.access_token);
 
-    // Fetch user profile from users table
+    // Fetch user profile from profiles table
     let fullName = data.user.email!.split('@')[0];
     try {
       const { data: userData, error: userError } = await this.supabase
-        .from('users')
+        .from('profiles')
         .select('full_name')
         .eq('id', data.user.id)
         .single();
@@ -600,9 +600,17 @@ class ApiService {
 
   // ==================== Dosha Methods ====================
 
-  async getLatestDosha(): Promise<DoshaAssessment> {
-    const response = await this.api.get<DoshaAssessment>('/dosha/latest');
-    return response.data;
+  async getLatestDosha(): Promise<DoshaAssessment | null> {
+    try {
+      const response = await this.api.get<DoshaAssessment>('/dosha/latest');
+      return response.data;
+    } catch (error: any) {
+      if (error.response?.status === 404) {
+        // No assessment found - return null instead of throwing
+        return null;
+      }
+      throw error;
+    }
   }
 
   async getDoshaHistory(): Promise<DoshaAssessment[]> {
@@ -627,8 +635,11 @@ class ApiService {
       return response.data;
     } catch (error: any) {
       if (error.response?.status === 404) {
-        return null; // No assessment found
+        // No assessment found - this is expected for new users
+        return null;
       }
+      // Only log unexpected errors
+      console.error('Error fetching dosha assessment:', error);
       throw error;
     }
   }
@@ -809,6 +820,56 @@ class ApiService {
 
   async getWellnessTrends(params?: DateRangeParams): Promise<any> {
     const response = await this.api.get('/analytics/wellness-trends', { params });
+    return response.data;
+  }
+
+  // ==================== Progress Analytics Methods ====================
+
+  async getDashboardMetrics(): Promise<{
+    avg_mood_today: number | null;
+    stress_level_today: number | null;
+    total_recommendations_today: number;
+    completed_recommendations_today: number;
+    adherence_value_today: number | null;
+    consistency_score: number;
+    wellness_score: number | null;
+    last_updated: string;
+  }> {
+    const response = await this.api.get('/progress/dashboard-metrics');
+    return response.data;
+  }
+
+  async getEmotionTrendsGraph(days: number = 30): Promise<{
+    trends: Array<{
+      date: string;
+      positive: number;
+      negative: number;
+      neutral: number;
+    }>;
+  }> {
+    const response = await this.api.get('/progress/emotion-trends', { params: { days } });
+    return response.data;
+  }
+
+  async getWellnessTrendGraph(days: number = 30): Promise<{
+    wellness_trend: Array<{
+      date: string;
+      wellness_score: number;
+    }>;
+  }> {
+    const response = await this.api.get('/progress/wellness-trend', { params: { days } });
+    return response.data;
+  }
+
+  async getAdherenceTrendGraph(days: number = 30): Promise<{
+    adherence_trend: Array<{
+      date: string;
+      total_recommendations: number;
+      completed_recommendations: number;
+      adherence_percentage: number | null;
+    }>;
+  }> {
+    const response = await this.api.get('/progress/adherence-trend', { params: { days } });
     return response.data;
   }
 
@@ -1078,7 +1139,7 @@ class ApiService {
     difficulty_rating?: number;
     satisfaction_rating?: number;
   }): Promise<any> {
-    const response = await this.api.post('/practice/sessions', null, { params: data });
+    const response = await this.api.post('/practice/sessions', data);
     return response.data;
   }
 

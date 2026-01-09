@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
+import {
   User,
   Calendar,
   Clock,
@@ -36,6 +36,7 @@ interface YogaRecommendationPageProps {
     category?: string;
     source?: string;
   }) => void;
+  refreshTrigger?: number;
 }
 
 export function YogaRecommendationPage({
@@ -43,7 +44,8 @@ export function YogaRecommendationPage({
   onNavigate,
   onLogout,
   onOpenNotifications,
-  onOpenPractice
+  onOpenPractice,
+  refreshTrigger
 }: YogaRecommendationPageProps) {
   const [yogaRecommendations, setYogaRecommendations] = useState<Recommendation[]>([]);
   const [recommendationsBySource, setRecommendationsBySource] = useState<RecommendationsBySource>({
@@ -59,7 +61,15 @@ export function YogaRecommendationPage({
   useEffect(() => {
     loadRecommendations();
   }, [selectedDate]);
-  
+
+  // Reload when refreshTrigger changes (after practice completion)
+  useEffect(() => {
+    if (refreshTrigger && refreshTrigger > 0) {
+      console.log('🔄 Refresh trigger received, reloading recommendations');
+      loadRecommendations();
+    }
+  }, [refreshTrigger]);
+
   // Auto-refresh to current day when component mounts or becomes visible
   useEffect(() => {
     const today = new Date().toISOString().split('T')[0];
@@ -67,7 +77,7 @@ export function YogaRecommendationPage({
       console.log('📅 Updating to today\'s date:', today);
       setSelectedDate(today);
     }
-    
+
     // Set up interval to check if date changed (for overnight usage)
     const checkDateInterval = setInterval(() => {
       const currentToday = new Date().toISOString().split('T')[0];
@@ -76,41 +86,34 @@ export function YogaRecommendationPage({
         setSelectedDate(currentToday);
       }
     }, 60000); // Check every minute
-    
+
     return () => clearInterval(checkDateInterval);
   }, []);
 
   const loadRecommendations = async () => {
     setLoading(true);
     try {
-      console.log('🧘 Loading yoga recommendations for date:', selectedDate);
-      
-      // Load yoga-specific recommendations
-      const yogaRecs = await api.getYogaRecommendations(selectedDate);
-      
-      // Deduplicate recommendations by content and title
-      const deduplicatedYoga = deduplicateRecommendations(yogaRecs);
-      setYogaRecommendations(deduplicatedYoga);
-      console.log('🧘 Loaded', deduplicatedYoga.length, 'unique yoga recommendations');
+      console.log('🧘 Loading yoga, breathing & meditation recommendations for date:', selectedDate);
 
-      // Load recommendations grouped by source for better display
-      try {
-        const groupedRecs = await api.getRecommendationsGroupedBySource('yoga', selectedDate);
-        
-        // Deduplicate within each source group
-        const deduplicatedGrouped = {
-          chat: deduplicateRecommendations(groupedRecs.chat || []),
-          device: deduplicateRecommendations(groupedRecs.device || []),
-          system: deduplicateRecommendations(groupedRecs.system || [])
-        };
-        setRecommendationsBySource(deduplicatedGrouped);
-        console.log('🧘 Grouped by source - Chat:', deduplicatedGrouped.chat.length, 'Device:', deduplicatedGrouped.device.length);
-      } catch (groupError) {
-        console.warn('⚠️ Grouped source loading failed, using individual recommendations:', groupError);
-        // Fallback: group the individual recommendations by source
-        const grouped = groupRecommendationsBySource(deduplicatedYoga);
-        setRecommendationsBySource(grouped);
-      }
+      // Load yoga, breathing, AND meditation recommendations (all related to yoga practice)
+      const [yogaRecs, breathingRecs, meditationRecs] = await Promise.all([
+        api.getYogaRecommendations(selectedDate),
+        api.getRecommendationsByCategory('breathing', selectedDate),
+        api.getRecommendationsByCategory('meditation', selectedDate)
+      ]);
+
+      // Combine all yoga-related recommendations
+      const allYogaRelated = [...yogaRecs, ...breathingRecs, ...meditationRecs];
+
+      // Deduplicate recommendations by content and title
+      const deduplicatedYoga = deduplicateRecommendations(allYogaRelated);
+      setYogaRecommendations(deduplicatedYoga);
+      console.log('🧘 Loaded', deduplicatedYoga.length, 'unique yoga-related recommendations (yoga:', yogaRecs.length, 'breathing:', breathingRecs.length, 'meditation:', meditationRecs.length + ')');
+
+      // Group the combined recommendations by source for better display
+      const grouped = groupRecommendationsBySource(deduplicatedYoga);
+      setRecommendationsBySource(grouped);
+      console.log('🧘 Grouped by source - Chat:', grouped.chat.length, 'Device:', grouped.device.length, 'System:', grouped.system.length);
 
     } catch (error) {
       console.error('❌ Error loading yoga recommendations:', error);
@@ -125,7 +128,7 @@ export function YogaRecommendationPage({
   const handleRefresh = () => {
     loadRecommendations();
   };
-  
+
   // Deduplicate recommendations by content similarity and title
   const deduplicateRecommendations = (recommendations: Recommendation[]) => {
     const seen = new Set();
@@ -134,7 +137,7 @@ export function YogaRecommendationPage({
       const normalizedTitle = rec.title.toLowerCase().trim();
       const normalizedContent = rec.content.toLowerCase().trim().substring(0, 100);
       const key = `${normalizedTitle}|${normalizedContent}`;
-      
+
       if (seen.has(key)) {
         console.log('🔄 Skipping duplicate:', rec.title);
         return false;
@@ -143,7 +146,7 @@ export function YogaRecommendationPage({
       return true;
     });
   };
-  
+
   // Group recommendations by source (fallback when API grouping fails)
   const groupRecommendationsBySource = (recommendations: Recommendation[]) => {
     const grouped = { chat: [], device: [], system: [] } as RecommendationsBySource;
@@ -160,11 +163,11 @@ export function YogaRecommendationPage({
     const date = new Date(dateStr);
     const today = new Date();
     const isToday = date.toDateString() === today.toDateString();
-    
+
     if (isToday) {
       return `Today, ${date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`;
     }
-    
+
     return date.toLocaleDateString('en-US', {
       weekday: 'long',
       year: 'numeric',
@@ -175,7 +178,7 @@ export function YogaRecommendationPage({
 
   // Ensure we're showing current day by default
   const isToday = selectedDate === new Date().toISOString().split('T')[0];
-  
+
   // Get source display info with proper icons and colors
   const getSourceIcon = (source: string) => {
     switch (source) {
@@ -189,7 +192,7 @@ export function YogaRecommendationPage({
         return <Star className="w-4 h-4 text-gray-500" />;
     }
   };
-  
+
   const getSourceLabel = (source: string) => {
     switch (source) {
       case 'chat':
@@ -216,57 +219,112 @@ export function YogaRecommendationPage({
     }
   };
 
-  const RecommendationCard = ({ recommendation }: { recommendation: Recommendation }) => (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-    >
-      <Card className="hover:shadow-md transition-shadow duration-200 border-l-4 border-l-orange-400">
-        <CardHeader className="pb-2">
-          <div className="flex items-start justify-between">
-            <div className="flex items-center gap-2">
-              {getSourceIcon(recommendation.source)}
-              <CardTitle className="text-lg font-semibold text-gray-900">
-                {recommendation.title}
-              </CardTitle>
+  const RecommendationCard = ({ recommendation }: { recommendation: Recommendation }) => {
+    // Get category color and icon
+    const getCategoryInfo = (category: string) => {
+      switch (category) {
+        case 'yoga':
+          return { color: 'bg-orange-100 text-orange-700', icon: '🧘', label: 'Yoga' };
+        case 'breathing':
+          return { color: 'bg-cyan-100 text-cyan-700', icon: '🌬️', label: 'Breathing' };
+        case 'meditation':
+          return { color: 'bg-purple-100 text-purple-700', icon: '🧘‍♀️', label: 'Meditation' };
+        default:
+          return { color: 'bg-gray-100 text-gray-700', icon: '✨', label: category };
+      }
+    };
+
+    const categoryInfo = getCategoryInfo(recommendation.category);
+    const isCompleted = (recommendation as any).Completed === 'YES' || recommendation.meta?.completed === true;
+
+    const handlePracticeClick = () => {
+      if (isCompleted) {
+        return; // Prevent action if completed
+      }
+      onOpenPractice?.({
+        id: recommendation.id,
+        title: recommendation.title,
+        content: recommendation.content,
+        category: recommendation.category,
+        source: recommendation.source
+      });
+    };
+
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+      >
+        <Card className={`hover:shadow-md transition-shadow duration-200 border-l-4 ${isCompleted ? 'border-l-green-500 bg-green-50/50' : 'border-l-orange-400'}`}>
+          <CardHeader className="pb-2">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-2 flex-wrap">
+                {getSourceIcon(recommendation.source)}
+                <CardTitle className={`text-lg font-semibold ${isCompleted ? 'text-gray-600' : 'text-gray-900'}`}>
+                  {recommendation.title}
+                </CardTitle>
+                <Badge className={`text-xs ${categoryInfo.color}`}>
+                  {categoryInfo.icon} {categoryInfo.label}
+                </Badge>
+                {isCompleted && (
+                  <Badge className="text-xs bg-green-500 text-white font-semibold">
+                    ✓ Completed
+                  </Badge>
+                )}
+              </div>
+              <Badge className={`text-xs ${getSourceColor(recommendation.source)}`}>
+                {recommendation.source}
+              </Badge>
             </div>
-            <Badge className={`text-xs ${getSourceColor(recommendation.source)}`}>
-              {recommendation.source}
-            </Badge>
-          </div>
-          <div className="flex items-center gap-1 text-xs text-gray-500">
-            <Clock className="w-3 h-3" />
-            {new Date(recommendation.created_at).toLocaleTimeString('en-US', { 
-              hour: '2-digit', 
-              minute: '2-digit' 
-            })}
-          </div>
-        </CardHeader>
-        <CardContent>
-          <p className="text-gray-700 leading-relaxed whitespace-pre-line mb-4">
-            {recommendation.content}
-          </p>
-          {onOpenPractice && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onOpenPractice({
-                id: recommendation.id,
-                title: recommendation.title,
-                content: recommendation.content,
-                category: 'yoga',
-                source: recommendation.source
+            <div className="flex items-center gap-1 text-xs text-gray-500">
+              <Clock className="w-3 h-3" />
+              {new Date(recommendation.created_at).toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit'
               })}
-              className="w-full bg-gradient-to-r from-orange-500 to-amber-500 text-white hover:from-orange-600 hover:to-amber-600 border-0"
-            >
-              <Play className="w-4 h-4 mr-2" />
-              Start Practice
-            </Button>
-          )}
-        </CardContent>
-      </Card>
-    </motion.div>
-  );
+            </div>
+          </CardHeader>
+          <CardContent>
+            <p className={`leading-relaxed whitespace-pre-line mb-4 ${isCompleted ? 'text-gray-500' : 'text-gray-700'}`}>
+              {recommendation.content}
+            </p>
+            {onOpenPractice && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handlePracticeClick}
+                style={!isCompleted ? {
+                  background: '#9b33e1',
+                  color: 'white',
+                  border: 'none',
+                  fontWeight: '600',
+                  boxShadow: '0 2px 8px rgba(155, 51, 225, 0.3)',
+                  transition: 'all 0.2s ease'
+                } : undefined}
+                className={`w-full ${isCompleted ? 'bg-green-100 text-green-700 cursor-not-allowed hover:bg-green-100' : 'hover:brightness-110 hover:shadow-lg'} ${!isCompleted ? 'border-0' : ''}`}
+                disabled={isCompleted}
+                onMouseEnter={(e) => {
+                  if (!isCompleted) {
+                    e.currentTarget.style.background = '#8a2bc7';
+                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(155, 51, 225, 0.4)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isCompleted) {
+                    e.currentTarget.style.background = '#9b33e1';
+                    e.currentTarget.style.boxShadow = '0 2px 8px rgba(155, 51, 225, 0.3)';
+                  }
+                }}
+              >
+                <Play className="w-4 h-4 mr-2" />
+                {isCompleted ? '✓ Completed - Cannot Retake' : 'Start Practice'}
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      </motion.div>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-amber-50">
@@ -291,12 +349,12 @@ export function YogaRecommendationPage({
               </div>
             </div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              Yoga Recommendations
+              Yoga & Wellness Practices
             </h1>
             <p className="text-gray-600 max-w-2xl mx-auto">
-              Personalized yoga practices and poses based on your conversations with the AI assistant and your device health data.
+              Personalized yoga, breathing, and meditation practices based on your conversations with the AI assistant and your health data.
             </p>
-            
+
             {/* Today's Summary */}
             {isToday && !loading && (yogaRecommendations.length > 0 || Object.keys(recommendationsBySource).some(key => recommendationsBySource[key as keyof typeof recommendationsBySource].length > 0)) && (
               <div className="mt-4 p-4 bg-orange-50 rounded-lg border border-orange-200 max-w-2xl mx-auto">
@@ -375,16 +433,16 @@ export function YogaRecommendationPage({
                 <div className="flex items-center gap-2 mb-4">
                   <Zap className="w-5 h-5 text-orange-500" />
                   <h2 className="text-xl font-semibold text-gray-900">
-                    Yoga Practices for {formatDate(selectedDate)}
+                    Wellness Practices for {formatDate(selectedDate)}
                   </h2>
-                  <Badge variant="secondary">{yogaRecommendations.length} recommendations</Badge>
+                  <Badge variant="secondary">{yogaRecommendations.length} practices</Badge>
                 </div>
-                
+
                 <AnimatePresence>
                   {yogaRecommendations.map((recommendation) => (
-                    <RecommendationCard 
-                      key={recommendation.id} 
-                      recommendation={recommendation} 
+                    <RecommendationCard
+                      key={recommendation.id}
+                      recommendation={recommendation}
                     />
                   ))}
                 </AnimatePresence>
@@ -476,42 +534,42 @@ export function YogaRecommendationPage({
                 )}
 
                 {/* No recommendations */}
-                {recommendationsBySource.chat.length === 0 && 
-                 recommendationsBySource.device.length === 0 && 
-                 recommendationsBySource.system.length === 0 && (
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="text-center py-12"
-                  >
-                    <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
-                      <Heart className="w-8 h-8 text-gray-400" />
-                    </div>
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">
-                      No recommendations available
-                    </h3>
-                    <p className="text-gray-600 mb-4">
-                      Recommendations will appear here after you chat with the AI or log health data.
-                    </p>
-                    <div className="flex flex-col sm:flex-row gap-2 justify-center">
-                      <Button
-                        onClick={() => onNavigate('chat')}
-                        className="bg-blue-500 hover:bg-blue-600"
-                      >
-                        <MessageCircle className="w-4 h-4 mr-2" />
-                        Start Chat
-                      </Button>
-                      <Button
-                        onClick={() => onNavigate('device')}
-                        variant="outline"
-                        className="border-green-500 text-green-600 hover:bg-green-50"
-                      >
-                        <Activity className="w-4 h-4 mr-2" />
-                        Log Health Data
-                      </Button>
-                    </div>
-                  </motion.div>
-                )}
+                {recommendationsBySource.chat.length === 0 &&
+                  recommendationsBySource.device.length === 0 &&
+                  recommendationsBySource.system.length === 0 && (
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="text-center py-12"
+                    >
+                      <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+                        <Heart className="w-8 h-8 text-gray-400" />
+                      </div>
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">
+                        No recommendations available
+                      </h3>
+                      <p className="text-gray-600 mb-4">
+                        Recommendations will appear here after you chat with the AI or log health data.
+                      </p>
+                      <div className="flex flex-col sm:flex-row gap-2 justify-center">
+                        <Button
+                          onClick={() => onNavigate('chat')}
+                          className="bg-blue-500 hover:bg-blue-600"
+                        >
+                          <MessageCircle className="w-4 h-4 mr-2" />
+                          Start Chat
+                        </Button>
+                        <Button
+                          onClick={() => onNavigate('device')}
+                          variant="outline"
+                          className="border-green-500 text-green-600 hover:bg-green-50"
+                        >
+                          <Activity className="w-4 h-4 mr-2" />
+                          Log Health Data
+                        </Button>
+                      </div>
+                    </motion.div>
+                  )}
               </div>
             )}
           </TabsContent>

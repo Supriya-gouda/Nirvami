@@ -82,7 +82,11 @@ class RecommendationService:
             List of stored recommendations
         """
         try:
-            logger.info(f"[REC_EXTRACT] Starting extraction for user {user_id}, message length: {len(message_text)}")
+            logger.info(f"[REC_EXTRACT] ========== STARTING EXTRACTION ==========")
+            logger.info(f"[REC_EXTRACT] User ID: {user_id}")
+            logger.info(f"[REC_EXTRACT] Message length: {len(message_text)}")
+            logger.info(f"[REC_EXTRACT] Message preview: {message_text[:200]}...")
+            logger.info(f"[REC_EXTRACT] Gemini available: {self.gemini is not None and self.gemini.model is not None}")
             
             # Calculate the date based on timestamp and timezone
             user_date = self._get_user_date(timestamp, timezone_offset)
@@ -91,14 +95,19 @@ class RecommendationService:
             # Parse recommendations using Gemini
             extracted_recs = await self._parse_recommendations_with_gemini(message_text)
             
+            logger.info(f"[REC_EXTRACT] Gemini extraction returned {len(extracted_recs) if extracted_recs else 0} recommendations")
+            
             if not extracted_recs:
-                logger.info(f"No recommendations extracted from chat for user {user_id}")
+                logger.info(f"[REC_EXTRACT] No recommendations extracted from chat for user {user_id}")
+                logger.info(f"[REC_EXTRACT] ========== EXTRACTION COMPLETE (NO RECS) ==========")
                 return []
             
             # Convert to RecommendationCreate objects and store
             recommendations = []
-            for rec in extracted_recs:
+            for i, rec in enumerate(extracted_recs):
                 try:
+                    logger.info(f"[REC_EXTRACT] Processing rec {i+1}/{len(extracted_recs)}: {rec.get('title', 'UNKNOWN')}")
+                    
                     rec_create = RecommendationCreate(
                         user_id=user_id,
                         date=user_date,
@@ -112,19 +121,21 @@ class RecommendationService:
                     stored_rec = await self._store_recommendation(rec_create)
                     if stored_rec:
                         recommendations.append(stored_rec)
-                        logger.info(f"[REC_EXTRACT] Stored recommendation: {stored_rec.category} - {stored_rec.title}")
+                        logger.info(f"[REC_EXTRACT] ✅ Stored recommendation: {stored_rec.category} - {stored_rec.title}")
                     else:
-                        logger.warning(f"[REC_EXTRACT] Failed to store recommendation (possible duplicate): {rec['title']}")
+                        logger.warning(f"[REC_EXTRACT] ⚠️ Failed to store recommendation (possible duplicate): {rec['title']}")
                         
                 except (ValueError, KeyError) as e:
-                    logger.warning(f"[REC_EXTRACT] Invalid recommendation format, skipping: {rec}. Error: {e}")
+                    logger.warning(f"[REC_EXTRACT] ❌ Invalid recommendation format, skipping: {rec}. Error: {e}")
                     continue
             
-            logger.info(f"[REC_EXTRACT] ✅ Stored {len(recommendations)} recommendations from chat for user {user_id} on {user_date}")
+            logger.info(f"[REC_EXTRACT] ✅ Successfully stored {len(recommendations)}/{len(extracted_recs)} recommendations")
+            logger.info(f"[REC_EXTRACT] ========== EXTRACTION COMPLETE ==========")
             return recommendations
             
         except Exception as e:
-            logger.error(f"Error extracting recommendations from chat: {e}", exc_info=True)
+            logger.error(f"[REC_EXTRACT] ❌ ERROR extracting recommendations from chat: {e}", exc_info=True)
+            logger.info(f"[REC_EXTRACT] ========== EXTRACTION FAILED ==========")
             return []
     
     async def save_device_recommendations(
@@ -250,7 +261,8 @@ class RecommendationService:
                         title=rec_data["title"],
                         content=rec_data["content"],
                         created_at=self._safe_parse_timestamp(rec_data["created_at"]),
-                        meta=rec_data.get("meta", {})
+                        meta=rec_data.get("meta", {}),
+                        Completed=rec_data.get("Completed")  # Include completion status
                     )
                     
                     category = rec.category.value
@@ -311,6 +323,8 @@ class RecommendationService:
             
             supabase = get_supabase()
             
+            # Fetch ALL recommendations including completed ones
+            # Frontend will display completed recommendations with visual indicators
             result = supabase.table("recommendations")\
                 .select("*")\
                 .eq("user_id", user_id)\
@@ -319,7 +333,7 @@ class RecommendationService:
                 .order("created_at", desc=True)\
                 .execute()
             
-            logger.info(f"[GET_CATEGORY] Found {len(result.data or [])} {category_str} recommendations")
+            logger.info(f"[GET_CATEGORY] Found {len(result.data or [])} {category_str} recommendations (including completed)")
             
             recommendations = []
             for rec_data in result.data:
@@ -332,7 +346,8 @@ class RecommendationService:
                     title=rec_data["title"],
                     content=rec_data["content"],
                     created_at=self._safe_parse_timestamp(rec_data["created_at"]),
-                    meta=rec_data.get("meta", {})
+                    meta=rec_data.get("meta", {}),
+                    Completed=rec_data.get("Completed")  # Include completion status
                 )
                 recommendations.append(rec)
             
@@ -618,7 +633,7 @@ Assistant response to analyze:
         
         Args:
             timestamp: UTC timestamp
-            timezone_offset: User's timezone offset in minutes
+            timezone_offset: User's timezone offset in minutes (positive for ahead of UTC)
         
         Returns:
             User's local date
@@ -629,8 +644,10 @@ Assistant response to analyze:
             local_time = timestamp + timedelta(minutes=timezone_offset)
             return local_time.date()
         
-        # Default to UTC date
-        return timestamp.date()
+        # Default: Use current local date (not UTC) to avoid timezone issues
+        # This ensures recommendations are stored for "today" in the user's perception
+        from datetime import datetime as dt
+        return dt.now().date()
 
 
 # Global instance

@@ -39,7 +39,7 @@ export function Navigation({ currentPage, onNavigate, onLogout, user, onOpenNoti
     { id: 'dashboard' as PageType, icon: Home, label: 'Dashboard' },
     { id: 'chatbot' as PageType, icon: MessageCircle, label: 'Chat' },
     { id: 'journal' as PageType, icon: BookOpen, label: 'Journal' },
-    { id: 'dinacharya' as PageType, icon: CalendarCheck, label: 'Dinacharya' },
+    // { id: 'dinacharya' as PageType, icon: CalendarCheck, label: 'Dinacharya' }, // Hidden - code preserved
     { id: 'aura' as PageType, icon: Sparkles, label: 'Aura' },
     { id: 'yoga-recommendations' as PageType, icon: Target, label: 'Yoga Recs' },
     { id: 'ayurveda-recommendations' as PageType, icon: Leaf, label: 'Ayurveda Recs' },

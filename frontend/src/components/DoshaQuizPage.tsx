@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronLeft, ChevronRight, Check, Sparkles } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Check } from 'lucide-react';
 import { Navigation } from './Navigation';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
@@ -25,7 +25,6 @@ interface Question {
   options: {
     text: string;
     dosha: 'vata' | 'pitta' | 'kapha';
-    score: number;
   }[];
 }
 
@@ -35,9 +34,9 @@ const questions: Question[] = [
     question: 'How would you describe your body frame?',
     category: 'vata',
     options: [
-      { text: 'Thin, light, hard to gain weight', dosha: 'vata', score: 3 },
-      { text: 'Medium, athletic build', dosha: 'pitta', score: 3 },
-      { text: 'Large, solid, easy to gain weight', dosha: 'kapha', score: 3 }
+      { text: 'Thin, light, hard to gain weight', dosha: 'vata' },
+      { text: 'Medium, athletic build', dosha: 'pitta' },
+      { text: 'Large, solid, easy to gain weight', dosha: 'kapha' }
     ]
   },
   {
@@ -45,9 +44,9 @@ const questions: Question[] = [
     question: 'What is your skin type?',
     category: 'pitta',
     options: [
-      { text: 'Dry, rough, thin', dosha: 'vata', score: 3 },
-      { text: 'Warm, soft, prone to rashes', dosha: 'pitta', score: 3 },
-      { text: 'Thick, oily, smooth', dosha: 'kapha', score: 3 }
+      { text: 'Dry, rough, thin', dosha: 'vata' },
+      { text: 'Warm, soft, prone to rashes', dosha: 'pitta' },
+      { text: 'Thick, oily, smooth', dosha: 'kapha' }
     ]
   },
   {
@@ -55,9 +54,9 @@ const questions: Question[] = [
     question: 'How is your appetite?',
     category: 'kapha',
     options: [
-      { text: 'Irregular, varies throughout the day', dosha: 'vata', score: 3 },
-      { text: 'Strong, I get angry when hungry', dosha: 'pitta', score: 3 },
-      { text: 'Steady, can skip meals easily', dosha: 'kapha', score: 3 }
+      { text: 'Irregular, varies throughout the day', dosha: 'vata' },
+      { text: 'Strong, I get angry when hungry', dosha: 'pitta' },
+      { text: 'Steady, can skip meals easily', dosha: 'kapha' }
     ]
   },
   {
@@ -65,9 +64,9 @@ const questions: Question[] = [
     question: 'How do you handle stress?',
     category: 'vata',
     options: [
-      { text: 'I get anxious and worried', dosha: 'vata', score: 3 },
-      { text: 'I become irritable and angry', dosha: 'pitta', score: 3 },
-      { text: 'I withdraw and become lethargic', dosha: 'kapha', score: 3 }
+      { text: 'I get anxious and worried', dosha: 'vata' },
+      { text: 'I become irritable and angry', dosha: 'pitta' },
+      { text: 'I withdraw and become lethargic', dosha: 'kapha' }
     ]
   },
   {
@@ -75,9 +74,9 @@ const questions: Question[] = [
     question: 'What is your sleep pattern like?',
     category: 'pitta',
     options: [
-      { text: 'Light sleeper, difficulty falling asleep', dosha: 'vata', score: 3 },
-      { text: 'Moderate, I sleep soundly but lightly', dosha: 'pitta', score: 3 },
-      { text: 'Heavy sleeper, love long sleep', dosha: 'kapha', score: 3 }
+      { text: 'Light sleeper, difficulty falling asleep', dosha: 'vata' },
+      { text: 'Moderate, I sleep soundly but lightly', dosha: 'pitta' },
+      { text: 'Heavy sleeper, love long sleep', dosha: 'kapha' }
     ]
   },
   {
@@ -85,9 +84,9 @@ const questions: Question[] = [
     question: 'How would you describe your energy levels?',
     category: 'kapha',
     options: [
-      { text: 'Quick bursts of energy, then fatigue', dosha: 'vata', score: 3 },
-      { text: 'Steady, intense energy', dosha: 'pitta', score: 3 },
-      { text: 'Slow to start, then steady endurance', dosha: 'kapha', score: 3 }
+      { text: 'Quick bursts of energy, then fatigue', dosha: 'vata' },
+      { text: 'Steady, intense energy', dosha: 'pitta' },
+      { text: 'Slow to start, then steady endurance', dosha: 'kapha' }
     ]
   },
   {
@@ -95,9 +94,9 @@ const questions: Question[] = [
     question: 'What is your typical body temperature?',
     category: 'vata',
     options: [
-      { text: 'Cold hands and feet', dosha: 'vata', score: 3 },
-      { text: 'Warm, I sweat easily', dosha: 'pitta', score: 3 },
-      { text: 'Cool, but comfortable', dosha: 'kapha', score: 3 }
+      { text: 'Cold hands and feet', dosha: 'vata' },
+      { text: 'Warm, I sweat easily', dosha: 'pitta' },
+      { text: 'Cool, but comfortable', dosha: 'kapha' }
     ]
   },
   {
@@ -105,9 +104,9 @@ const questions: Question[] = [
     question: 'How do you learn best?',
     category: 'pitta',
     options: [
-      { text: 'Quick to learn, quick to forget', dosha: 'vata', score: 3 },
-      { text: 'Sharp intellect, good retention', dosha: 'pitta', score: 3 },
-      { text: 'Slow to learn, excellent retention', dosha: 'kapha', score: 3 }
+      { text: 'Quick to learn, quick to forget', dosha: 'vata' },
+      { text: 'Sharp intellect, good retention', dosha: 'pitta' },
+      { text: 'Slow to learn, excellent retention', dosha: 'kapha' }
     ]
   },
   {
@@ -115,9 +114,9 @@ const questions: Question[] = [
     question: 'How is your digestion?',
     category: 'kapha',
     options: [
-      { text: 'Irregular, gas, bloating', dosha: 'vata', score: 3 },
-      { text: 'Strong, fast metabolism', dosha: 'pitta', score: 3 },
-      { text: 'Slow, heavy feeling after meals', dosha: 'kapha', score: 3 }
+      { text: 'Irregular, gas, bloating', dosha: 'vata' },
+      { text: 'Strong, fast metabolism', dosha: 'pitta' },
+      { text: 'Slow, heavy feeling after meals', dosha: 'kapha' }
     ]
   },
   {
@@ -125,25 +124,44 @@ const questions: Question[] = [
     question: 'What is your decision-making style?',
     category: 'vata',
     options: [
-      { text: 'Quick, sometimes impulsive', dosha: 'vata', score: 3 },
-      { text: 'Decisive, analytical', dosha: 'pitta', score: 3 },
-      { text: 'Slow, methodical, thoughtful', dosha: 'kapha', score: 3 }
+      { text: 'Quick, sometimes impulsive', dosha: 'vata' },
+      { text: 'Decisive, analytical', dosha: 'pitta' },
+      { text: 'Slow, methodical, thoughtful', dosha: 'kapha' }
+    ]
+  },
+  {
+    id: 'q11',
+    question: 'How do you typically speak?',
+    category: 'pitta',
+    options: [
+      { text: 'Fast, enthusiastic, sometimes rambling', dosha: 'vata' },
+      { text: 'Sharp, clear, precise, sometimes argumentative', dosha: 'pitta' },
+      { text: 'Slow, melodious, good listener', dosha: 'kapha' }
+    ]
+  },
+  {
+    id: 'q12',
+    question: 'What is your walking pace?',
+    category: 'kapha',
+    options: [
+      { text: 'Fast, irregular, light steps', dosha: 'vata' },
+      { text: 'Medium, determined, purposeful', dosha: 'pitta' },
+      { text: 'Slow, steady, heavy steps', dosha: 'kapha' }
     ]
   }
 ];
 
 export function DoshaQuizPage({ user, onNavigate, onLogout, onOpenNotifications }: DoshaQuizPageProps) {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [answers, setAnswers] = useState<Record<string, string>>(
+    questions.reduce((acc, q) => ({ ...acc, [q.id]: '' }), {})
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showResults, setShowResults] = useState(false);
-  const [result, setResult] = useState<any>(null);
-  const [recommendations, setRecommendations] = useState<any>(null);
 
   const currentQuestion = questions[currentQuestionIndex];
   const progress = ((currentQuestionIndex + 1) / questions.length) * 100;
   const isLastQuestion = currentQuestionIndex === questions.length - 1;
-  const canGoNext = answers[currentQuestion.id] !== undefined;
+  const canGoNext = answers[currentQuestion.id] !== undefined && answers[currentQuestion.id] !== '';
 
   const handleAnswer = (optionIndex: number) => {
     setAnswers({
@@ -169,201 +187,35 @@ export function DoshaQuizPage({ user, onNavigate, onLogout, onOpenNotifications 
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
-      // Transform answers to backend format: {question_id, answer_value}[]
-      const formattedAnswers = questions.map((q, index) => {
-        const answerIndex = parseInt(answers[q.id] || '0');
-        const selectedOption = q.options[answerIndex];
+      // Convert answers to new API format with selected_dosha
+      const quizAnswers = questions.map((q) => {
+        const selectedOptionIndex = parseInt(answers[q.id] || '0');
+        const selectedOption = q.options[selectedOptionIndex];
         
         return {
-          question_id: index + 1, // 1-based question ID
-          answer_value: selectedOption.score
+          question_id: q.id,  // Use question ID (e.g., 'q1')
+          selected_dosha: selectedOption.dosha  // Which dosha was selected (vata/pitta/kapha)
         };
       });
 
+      console.log('Submitting dosha quiz with answers:', quizAnswers);
+
       // Submit to backend
-      const doshaResult = await api.submitDoshaAssessment({
-        answers: formattedAnswers
-      });
-
-      // Get recommendations
-      const recs = await api.getDoshaRecommendations();
-
-      setResult(doshaResult);
-      setRecommendations(recs);
-      setShowResults(true);
-    } catch (err) {
-      console.error('Failed to submit dosha quiz:', err);
-      alert('Failed to submit quiz. Please try again.');
+      const result = await api.submitDoshaAssessment({ answers: quizAnswers });
+      
+      console.log('Dosha assessment result:', result);
+      
+      // Navigate to dashboard
+      onNavigate('dashboard');
+    } catch (err: any) {
+      console.error('Error submitting quiz:', err);
+      console.error('Error details:', err.response?.data);
+      const errorMsg = err.response?.data?.detail || 'Failed to submit quiz. Please try again.';
+      alert(errorMsg);
     } finally {
       setIsSubmitting(false);
     }
   };
-
-  const getDoshaColor = (dosha: string) => {
-    const colors = {
-      vata: 'from-blue-400 to-cyan-400',
-      pitta: 'from-orange-400 to-red-400',
-      kapha: 'from-green-400 to-emerald-400'
-    };
-    return colors[dosha as keyof typeof colors] || 'from-purple-400 to-pink-400';
-  };
-
-  if (showResults && result) {
-    const dominantDosha = result.primary_dosha || result.dominant_dosha || 'vata';
-    
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50">
-        <Navigation currentPage="yoga" onNavigate={onNavigate} onLogout={onLogout} user={user} onOpenNotifications={onOpenNotifications} />
-        
-        <div className="max-w-4xl mx-auto p-8">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="text-center mb-8"
-          >
-            <Sparkles className="w-16 h-16 text-purple-600 mx-auto mb-4" />
-            <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-              Your Dosha Profile
-            </h1>
-            <p className="text-gray-600">Discover your Ayurvedic constitution</p>
-          </motion.div>
-
-          {/* Dosha Scores */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="mb-8"
-          >
-            <Card className={`bg-gradient-to-br ${getDoshaColor(dominantDosha)} text-white border-none shadow-2xl`}>
-              <CardHeader>
-                <CardTitle className="text-3xl text-center">
-                  Your Primary Dosha: {dominantDosha.charAt(0).toUpperCase() + dominantDosha.slice(1)}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div>
-                    <div className="flex justify-between mb-2">
-                      <span className="font-semibold">Vata</span>
-                      <span>{result.vata_score || 0}%</span>
-                    </div>
-                    <Progress value={result.vata_score || 0} className="h-3 bg-white/30" />
-                  </div>
-                  <div>
-                    <div className="flex justify-between mb-2">
-                      <span className="font-semibold">Pitta</span>
-                      <span>{result.pitta_score || 0}%</span>
-                    </div>
-                    <Progress value={result.pitta_score || 0} className="h-3 bg-white/30" />
-                  </div>
-                  <div>
-                    <div className="flex justify-between mb-2">
-                      <span className="font-semibold">Kapha</span>
-                      <span>{result.kapha_score || 0}%</span>
-                    </div>
-                    <Progress value={result.kapha_score || 0} className="h-3 bg-white/30" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          {/* Recommendations */}
-          {recommendations && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4 }}
-              className="grid md:grid-cols-2 gap-6 mb-8"
-            >
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    🍽️ Diet Recommendations
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ul className="space-y-2">
-                    {recommendations.diet?.map((tip: string, index: number) => (
-                      <li key={index} className="flex items-start gap-2">
-                        <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                        <span className="text-sm text-gray-700">{tip}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    🧘 Lifestyle Tips
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ul className="space-y-2">
-                    {recommendations.lifestyle?.map((tip: string, index: number) => (
-                      <li key={index} className="flex items-start gap-2">
-                        <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                        <span className="text-sm text-gray-700">{tip}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    🕉️ Yoga Practices
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ul className="space-y-2">
-                    {recommendations.yoga?.map((tip: string, index: number) => (
-                      <li key={index} className="flex items-start gap-2">
-                        <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                        <span className="text-sm text-gray-700">{tip}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    🧠 Meditation
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ul className="space-y-2">
-                    {recommendations.meditation?.map((tip: string, index: number) => (
-                      <li key={index} className="flex items-start gap-2">
-                        <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                        <span className="text-sm text-gray-700">{tip}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-              </Card>
-            </motion.div>
-          )}
-
-          <div className="text-center">
-            <Button
-              onClick={() => onNavigate('dashboard')}
-              size="lg"
-              className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
-            >
-              Go to Dashboard
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50">

@@ -7,7 +7,7 @@ import { LogPage } from './components/LogPage';
 import { YogaRecommendationPage } from './components/YogaRecommendationPage';
 import { AyurvedaRecommendationPage } from './components/AyurvedaRecommendationPage';
 import { DietMoodPage } from './components/DietMoodPage';
-import { ProgressAnalyticsPage } from './components/ProgressAnalyticsPage';
+import { ProgressAnalyticsPage } from './components/ProgressAnalyticsPageNew';
 import { EmotionHistoryPage } from './components/EmotionHistoryPage';
 import { AuraVisualizationPage } from './components/AuraVisualizationPage';
 import { DevicePage } from './components/DevicePage';
@@ -21,8 +21,9 @@ import { AccountSettingsPage } from './components/AccountSettingsPage';
 import { DailyRoutinesPage } from './components/DailyRoutinesPage';
 import { DinacharyaPage } from './components/DinacharyaPage';
 import { PracticeDetailPage } from './components/PracticeDetailPage';
+import { PracticeRouter } from './components/PracticeRouter';
 import Journal from './pages/Journal';
-import { Toaster } from './components/ui/sonner';
+import { Toaster } from './components/ui/toaster';
 import { useAuth } from './contexts/AuthContext';
 import api from './services/api';
 
@@ -35,6 +36,7 @@ function App() {
   const [showNotificationCenter, setShowNotificationCenter] = useState(false);
   const [auraRefreshTrigger, setAuraRefreshTrigger] = useState(0);
   const [previousPage, setPreviousPage] = useState<PageType>('dashboard');
+  const [recommendationRefreshTrigger, setRecommendationRefreshTrigger] = useState(0);
   const [selectedPractice, setSelectedPractice] = useState<{
     id?: string;
     title: string;
@@ -169,12 +171,29 @@ function App() {
     if (!isLoading) {
       if (isAuthenticated) {
         if (currentPage === 'landing' || currentPage === 'signin' || currentPage === 'signup') {
-          console.log('[App] User just logged in, navigating to dashboard and showing popup');
-          setCurrentPage('dashboard');
-          // Show popup immediately after login (forced) - wait a bit for dashboard to mount
-          setTimeout(() => {
-            checkAndShowMoodPopup(true);
-          }, 500);
+          console.log('[App] User just logged in, checking dosha status...');
+          
+          const checkDosha = async () => {
+            try {
+              const dosha = await api.getCurrentDosha();
+              if (!dosha) {
+                console.log('[App] No dosha assessment found, redirecting to quiz');
+                setCurrentPage('dosha');
+              } else {
+                console.log('[App] Dosha assessment found, navigating to dashboard');
+                setCurrentPage('dashboard');
+                // Show popup immediately after login (forced) - wait a bit for dashboard to mount
+                setTimeout(() => {
+                  checkAndShowMoodPopup(true);
+                }, 500);
+              }
+            } catch (error) {
+              console.error('[App] Error checking dosha status:', error);
+              setCurrentPage('dashboard');
+            }
+          };
+          
+          checkDosha();
         }
       } else {
         if (currentPage !== 'landing' && currentPage !== 'signin' && currentPage !== 'signup') {
@@ -188,11 +207,19 @@ function App() {
     setCurrentPage(page);
   };
 
-  const handleLoginSuccess = () => {
+  const handleLoginSuccess = async () => {
     console.log('[App] Login success handler called');
-    setCurrentPage('dashboard');
-    // Don't call checkAndShowMoodPopup here - let the useEffect above handle it
-    // when isAuthenticated becomes true
+    try {
+      const dosha = await api.getCurrentDosha();
+      if (!dosha) {
+        setCurrentPage('dosha');
+      } else {
+        setCurrentPage('dashboard');
+      }
+    } catch (e) {
+      console.error('Error checking dosha on login:', e);
+      setCurrentPage('dashboard');
+    }
   };
 
   const handleLogout = () => {
@@ -242,8 +269,8 @@ function App() {
       {currentPage === 'manual' && <LogPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
       {currentPage === 'moodboard' && <LogPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
       {currentPage === 'journal' && <Journal user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
-      {currentPage === 'yoga-recommendations' && <YogaRecommendationPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} onOpenPractice={(rec) => { setPreviousPage('yoga-recommendations'); setSelectedPractice(rec); setCurrentPage('practice'); }} />}
-      {currentPage === 'ayurveda-recommendations' && <AyurvedaRecommendationPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} onOpenPractice={(rec) => { setPreviousPage('ayurveda-recommendations'); setSelectedPractice(rec); setCurrentPage('practice'); }} />}
+      {currentPage === 'yoga-recommendations' && <YogaRecommendationPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} onOpenPractice={(rec) => { setPreviousPage('yoga-recommendations'); setSelectedPractice(rec); setCurrentPage('practice'); }} refreshTrigger={recommendationRefreshTrigger} />}
+      {currentPage === 'ayurveda-recommendations' && <AyurvedaRecommendationPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} onOpenPractice={(rec) => { setPreviousPage('ayurveda-recommendations'); setSelectedPractice(rec); setCurrentPage('practice'); }} refreshTrigger={recommendationRefreshTrigger} />}
       {currentPage === 'diet' && <DietMoodPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
       {currentPage === 'progress' && <ProgressAnalyticsPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
       {currentPage === 'emotion-history' && <EmotionHistoryPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
@@ -255,13 +282,19 @@ function App() {
       {currentPage === 'profile' && <ProfilePage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
       {currentPage === 'settings' && <AccountSettingsPage user={user} onNavigate={navigateToPage} onLogout={handleLogout} onOpenNotifications={() => setShowNotificationCenter(true)} />}
       {currentPage === 'practice' && selectedPractice && (
-        <PracticeDetailPage
-          user={user}
+        <PracticeRouter
           recommendation={selectedPractice}
-          onNavigate={navigateToPage}
-          onLogout={handleLogout}
-          onOpenNotifications={() => setShowNotificationCenter(true)}
-          onClose={() => { setCurrentPage(previousPage); setSelectedPractice(null); }}
+          onComplete={() => { 
+            console.log('✅ Practice completed, returning to:', previousPage);
+            setRecommendationRefreshTrigger(prev => prev + 1); // Trigger recommendation refresh
+            setCurrentPage(previousPage); 
+            setSelectedPractice(null); 
+          }}
+          onClose={() => { 
+            console.log('❌ Practice closed without completion, returning to:', previousPage);
+            setCurrentPage(previousPage); 
+            setSelectedPractice(null); 
+          }}
         />
       )}
 

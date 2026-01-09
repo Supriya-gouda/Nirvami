@@ -25,62 +25,88 @@ class DoshaService:
         7: "vata",   # body temperature
         8: "pitta",  # learning style
         9: "kapha",  # digestion
-        10: "vata"   # decision making
+        10: "vata",  # decision making
+        11: "pitta", # speech
+        12: "kapha"  # walking pace
     }
     
     @staticmethod
     def calculate_scores(answers: List[DoshaAnswer]) -> dict:
         """
-        Calculate dosha scores from quiz answers.
+        Calculate dosha percentages using simple counting method.
+        
+        Each answer maps to exactly one dosha and contributes 1 point.
+        Percentages calculated as (count / total) * 100.
         
         Args:
-            answers: List of DoshaAnswer objects with question_id and answer_value
+            answers: List of DoshaAnswer objects with selected_dosha field
             
         Returns:
-            Dictionary with vata_score, pitta_score, kapha_score, dominant_dosha
+            Dictionary with percentages, primary/secondary doshas, and result_type
         """
-        vata_score = 0
-        pitta_score = 0
-        kapha_score = 0
+        # Initialize counters
+        vata_count = 0
+        pitta_count = 0
+        kapha_count = 0
         
-        # Sum up scores based on question-to-dosha mapping
+        # Count selections - each answer contributes exactly 1 point
         for answer in answers:
-            question_id = answer.question_id
-            score_value = answer.answer_value
-            
-            # Map question to dosha category
-            dosha_category = DoshaService.QUESTION_DOSHA_MAP.get(question_id)
-            
-            if dosha_category == "vata":
-                vata_score += score_value
-            elif dosha_category == "pitta":
-                pitta_score += score_value
-            elif dosha_category == "kapha":
-                kapha_score += score_value
+            selected_dosha = answer.selected_dosha.lower()
+            if selected_dosha == "vata":
+                vata_count += 1
+            elif selected_dosha == "pitta":
+                pitta_count += 1
+            elif selected_dosha == "kapha":
+                kapha_count += 1
         
-        # Determine dominant dosha
-        scores = {
-            "vata": vata_score,
-            "pitta": pitta_score,
-            "kapha": kapha_score
-        }
-        dominant_dosha = max(scores, key=scores.get)
+        # Calculate total (should equal number of questions)
+        total = vata_count + pitta_count + kapha_count
+        if total == 0:
+            total = 1  # Avoid division by zero
+            
+        # Calculate percentages
+        vata_percent = round((vata_count / total) * 100, 2)
+        pitta_percent = round((pitta_count / total) * 100, 2)
+        kapha_percent = round((kapha_count / total) * 100, 2)
+
+        # Create sorted list of doshas by percentage (descending)
+        dosha_percentages = [
+            ("vata", vata_percent),
+            ("pitta", pitta_percent),
+            ("kapha", kapha_percent)
+        ]
+        dosha_percentages.sort(key=lambda x: x[1], reverse=True)
         
-        # Determine secondary dosha (if score is within 20% of dominant)
-        sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+        # Determine primary dosha (highest percentage)
+        primary_dosha = dosha_percentages[0][0]
         secondary_dosha = None
-        if len(sorted_scores) > 1:
-            threshold = sorted_scores[0][1] * 0.8
-            if sorted_scores[1][1] >= threshold:
-                secondary_dosha = sorted_scores[1][0]
+        result_type = "single"
+        
+        # Check for Tri-Dosha (all within 10% range)
+        max_percent = dosha_percentages[0][1]
+        min_percent = dosha_percentages[2][1]
+        if max_percent - min_percent <= 10:
+            result_type = "tri"
+            secondary_dosha = None  # Tri-doshic has no secondary
+        else:
+            # Check for Dual Dosha (top 2 within 10% difference)
+            top1_percent = dosha_percentages[0][1]
+            top2_percent = dosha_percentages[1][1]
+            if top1_percent - top2_percent <= 10:
+                result_type = "dual"
+                secondary_dosha = dosha_percentages[1][0]
         
         return {
-            "vata_score": vata_score,
-            "pitta_score": pitta_score,
-            "kapha_score": kapha_score,
-            "dominant_dosha": dominant_dosha,
-            "primary_dosha": dominant_dosha,
-            "secondary_dosha": secondary_dosha
+            "vata_count": vata_count,
+            "pitta_count": pitta_count,
+            "kapha_count": kapha_count,
+            "vata_percent": vata_percent,
+            "pitta_percent": pitta_percent,
+            "kapha_percent": kapha_percent,
+            "primary_dosha": primary_dosha,
+            "secondary_dosha": secondary_dosha,
+            "result_type": result_type,
+            "dominant_dosha": primary_dosha  # For backward compatibility
         }
     
     # Legacy indicators for backward compatibility

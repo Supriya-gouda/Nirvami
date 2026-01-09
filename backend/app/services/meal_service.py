@@ -429,17 +429,27 @@ Keep all text concise and actionable. Be specific about Ayurvedic principles."""
             
             response = self.gemini.chat(prompt)
             
+            # Check if response is an error message or chatbot refusal
+            if any(phrase in response.lower() for phrase in [
+                'apologize', 'unable to', 'cannot help', 'specifically designed',
+                'mental wellness', 'error occurred'
+            ]):
+                logger.warning(f"Gemini returned error/refusal: {response[:100]}")
+                raise Exception("Invalid Gemini response")
+            
             # Clean and split the response
             ingredients = [ing.strip() for ing in response.split(',')]
             ingredients = [ing for ing in ingredients if ing and len(ing) > 1]
             
-            return ingredients[:10]  # Limit to 10 ingredients
+            # Additional validation - ingredients should be short food names
+            ingredients = [ing for ing in ingredients if len(ing) < 50]
+            
+            return ingredients[:10] if ingredients else []
             
         except Exception as e:
             logger.warning(f"Failed to extract ingredients with AI: {e}")
-            # Fallback: simple word extraction
-            words = re.findall(r'\b[a-zA-Z]+\b', meal_text.lower())
-            return words[:5]
+            # Fallback: return empty list or meal_text as single item
+            return [meal_text] if meal_text else []
 
     async def _analyze_dosha_impact(self, meal_text: str, ingredients: List[str]) -> Dict[str, Any]:
         """Analyze the dosha impact of a meal"""
@@ -855,10 +865,13 @@ Keep all text concise and actionable. Be specific about Ayurvedic principles."""
                - Nutritional strengths and weaknesses
                - Portion size assessment
             
-            2. AYURVEDIC ANALYSIS
-               - Detailed dosha impact explanation
-               - How this meal affects body constitution
-               - Timing considerations (is it suitable for this time of day?)
+            2. AYURVEDIC ANALYSIS - ONLY 3 KEY POINTS
+               Keep this section BRIEF and CONCISE:
+               - Point 1: Dosha effect (1 sentence: which dosha is affected and how)
+               - Point 2: Constitution impact (1 sentence: immediate body effect)  
+               - Point 3: Timing consideration (1 sentence: is this meal appropriate for time of day)
+               
+               DO NOT write paragraphs. Keep each point to ONE SHORT sentence (10-15 words max).
             
             3. MOOD-BASED RECOMMENDATIONS
                - How this meal may affect the user's current mood
@@ -870,10 +883,17 @@ Keep all text concise and actionable. Be specific about Ayurvedic principles."""
                - Healthier cooking methods
                - Complementary foods to add
             
-            5. AYURVEDIC GUIDANCE
-               - Specific foods to favor in next meals
-               - Foods to avoid based on dosha balance
-               - Lifestyle recommendations
+            5. AYURVEDIC GUIDANCE - EXACTLY 2 FOOD TIPS
+               Provide ONLY 2 specific, actionable food tips to improve health instead of current meal:
+               
+               Tip 1: One healthier food alternative to what was eaten (be specific)
+               Tip 2: One beneficial food to add in next meal (be specific)
+               
+               Format: Short, direct recommendations (1 sentence each)
+               Example: "Replace white rice with quinoa for better protein" OR "Add steamed spinach to your next meal for iron"
+               
+               DO NOT include: lifestyle tips, general advice, or foods to avoid
+               ONLY include: 2 specific food tips for healthier alternatives
             
             Return ONLY a JSON object with this structure:
             {{
@@ -885,9 +905,9 @@ Keep all text concise and actionable. Be specific about Ayurvedic principles."""
                     "concerns": ["concern1", "concern2"]
                 }},
                 "ayurvedic_analysis": {{
-                    "dosha_effects": "Detailed explanation",
-                    "constitution_impact": "How it affects body",
-                    "timing_advice": "Time of day considerations"
+                    "point1": "Dosha effect (1 short sentence)",
+                    "point2": "Constitution impact (1 short sentence)",
+                    "point3": "Timing advice (1 short sentence)"
                 }},
                 "mood_recommendations": {{
                     "mood_impact": "How meal affects current mood",
@@ -900,9 +920,8 @@ Keep all text concise and actionable. Be specific about Ayurvedic principles."""
                     "complementary_foods": ["food1", "food2"]
                 }},
                 "guidance": {{
-                    "foods_to_favor": ["food1", "food2"],
-                    "foods_to_avoid": ["food1", "food2"],
-                    "lifestyle_tips": ["tip1", "tip2"]
+                    "food_tip_1": "Specific healthier alternative to current food",
+                    "food_tip_2": "Specific beneficial food to add next meal"
                 }}
             }}
             """
@@ -956,9 +975,9 @@ Keep all text concise and actionable. Be specific about Ayurvedic principles."""
                 "concerns": ["Add more fiber"]
             },
             "ayurvedic_analysis": {
-                "dosha_effects": "Balanced effect on doshas.",
-                "constitution_impact": "Supports vitality.",
-                "timing_advice": "Best for main meal."
+                "point1": "Balanced effect on all three doshas.",
+                "point2": "Supports vitality and energy levels.",
+                "point3": "Best consumed during main meal times."
             },
             "mood_recommendations": {
                 "mood_impact": "Balanced nutrition supports emotional well-being.",
@@ -971,9 +990,8 @@ Keep all text concise and actionable. Be specific about Ayurvedic principles."""
                 "complementary_foods": ["Herbal tea", "Fresh fruit"]
             },
             "guidance": {
-                "foods_to_favor": ["Seasonal vegetables", "Whole grains"],
-                "foods_to_avoid": ["Excessive sugar", "Processed foods"],
-                "lifestyle_tips": ["Eat mindfully", "Stay hydrated"]
+                "food_tip_1": "Replace refined grains with whole grain alternatives like brown rice or quinoa",
+                "food_tip_2": "Add a serving of colorful vegetables to your next meal for vitamins"
             }
         }
 

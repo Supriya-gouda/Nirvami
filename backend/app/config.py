@@ -32,7 +32,10 @@ class Settings(BaseSettings):
     FROM_EMAIL: str = "noreply@nirvami.app"
     
     # Google Gemini API
-    GEMINI_API_KEY: str = "AIzaSyA6jiyvBEPWScNfI8YH47MGW8LCoS6yReA"
+    GEMINI_API_KEY: str
+    
+    # YouTube API
+    YOUTUBE_API_KEY: str = ""
     
     # Application
     SECRET_KEY: str
@@ -54,7 +57,7 @@ class Settings(BaseSettings):
     
     # Emotion Detection Settings
     USE_ML_EMOTION_MODEL: bool = True  # Use ML model for emotion detection (fallback to rules if fails)
-    EMOTION_CONFIDENCE_THRESHOLD: float = 0.55  # Min confidence to use ML result, else fallback to rules
+    EMOTION_CONFIDENCE_THRESHOLD: float = 0.45  # Min confidence to use ML result, else fallback to rules
     
     @property
     def origins_list(self) -> List[str]:

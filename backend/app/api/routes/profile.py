@@ -387,6 +387,8 @@ async def record_visit(
         # Use service role to bypass RLS for reliable operations
         supabase = get_supabase(use_service_role=True)
         
+        logger.info(f"📅 Recording visit for user {current_user_id} on {today_str}")
+        
         # Get current preferences
         result = supabase.table("user_preferences").select("*").eq("user_id", current_user_id).execute()
         
@@ -400,6 +402,7 @@ async def record_visit(
         
         if not result.data or len(result.data) == 0:
             # No row exists - try to create one
+            logger.info(f"Creating new preferences for user {current_user_id}")
             try:
                 prefs = {
                     "user_id": current_user_id,
@@ -434,9 +437,12 @@ async def record_visit(
         
         # Row exists - process streak update
         prefs = result.data[0]
-        streak_data = prefs.get("preferences", {}).get("streak_data", default_streak.copy())
+        current_preferences = prefs.get("preferences", {})
+        streak_data = current_preferences.get("streak_data", default_streak.copy())
         
         last_visit = streak_data.get("last_visit_date")
+        
+        logger.info(f"User {current_user_id[:8]}... last visit: {last_visit}, today: {today_str}")
         
         # Check if already visited today - IDEMPOTENT
         if last_visit == today_str:
@@ -454,18 +460,23 @@ async def record_visit(
                 today_date = date.today()
                 days_diff = (today_date - last_date).days
                 
+                logger.info(f"Days since last visit: {days_diff}")
+                
                 if days_diff == 1:
                     # Consecutive day - increment streak
                     streak_data["current_streak"] = streak_data.get("current_streak", 0) + 1
+                    logger.info(f"✅ Consecutive day! Incrementing streak to {streak_data['current_streak']}")
                 else:
                     # Streak broken - reset to 1
                     streak_data["current_streak"] = 1
+                    logger.info(f"⚠️ Streak broken (gap of {days_diff} days), resetting to 1")
             except (ValueError, TypeError) as date_err:
-                logger.warning(f"⚠️ Invalid last_visit_date: {last_visit}, resetting streak")
+                logger.warning(f"⚠️ Invalid last_visit_date: {last_visit}, resetting streak: {date_err}")
                 streak_data["current_streak"] = 1
         else:
             # First visit ever
             streak_data["current_streak"] = 1
+            logger.info(f"🎉 First visit ever for user {current_user_id}")
         
         # Update longest streak
         streak_data["longest_streak"] = max(
@@ -478,23 +489,27 @@ async def record_visit(
         visit_dates = streak_data.get("visit_dates", [])
         if today_str not in visit_dates:
             visit_dates.append(today_str)
-        visit_dates = visit_dates[-30:]  # Keep only last 30 days
+        visit_dates = sorted(visit_dates)[-30:]  # Keep only last 30 days, sorted
         streak_data["visit_dates"] = visit_dates
         
-        # Update database
+        # Update database - IMPORTANT: preserve all existing preferences
         updated_prefs = prefs.get("preferences", {})
         updated_prefs["streak_data"] = streak_data
         
+        logger.info(f"💾 Saving streak data: current={streak_data['current_streak']}, longest={streak_data['longest_streak']}")
+        
         update_result = supabase.table("user_preferences").update({
-            "preferences": updated_prefs
+            "preferences": updated_prefs,
+            "updated_at": datetime.utcnow().isoformat()
         }).eq("user_id", current_user_id).execute()
         
         if update_result.data:
-            logger.info(f"✅ Updated streak for {current_user_id}: {streak_data['current_streak']} days")
+            logger.info(f"✅ Streak updated successfully for {current_user_id}: {streak_data['current_streak']} days")
             return {
                 "ok": True,
                 "streak_updated": True,
-                "current_streak": streak_data["current_streak"]
+                "current_streak": streak_data["current_streak"],
+                "longest_streak": streak_data["longest_streak"]
             }
         else:
             logger.warning(f"⚠️ Update returned no data for {current_user_id}")

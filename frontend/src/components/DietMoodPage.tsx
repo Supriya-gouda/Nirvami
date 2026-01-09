@@ -189,6 +189,8 @@ export function DietMoodPage({ user, onNavigate, onLogout, onOpenNotifications }
     return text.includes('apologize') || 
            text.includes('unable to connect') || 
            text.includes('wellness knowledge base') ||
+           text.includes('specifically designed to support') ||
+           text.includes('mental wellness journey') ||
            text.toLowerCase().includes('error');
   };
 
@@ -420,7 +422,13 @@ export function DietMoodPage({ user, onNavigate, onLogout, onOpenNotifications }
                                   <p key={idx} className={`text-sm ${colors.textLight}`}>• {ingredient}</p>
                                 ))
                               ) : hasValidMealText ? (
-                                <p className={`text-sm ${colors.textLight}`}>{meal.meal_text}</p>
+                                <p className={`text-sm ${colors.textLight}`}>
+                                  <strong>Meal:</strong> {meal.meal_text}
+                                </p>
+                              ) : meal.meal_text ? (
+                                <p className={`text-sm ${colors.textLight}`}>
+                                  <strong>Meal:</strong> {meal.meal_text}
+                                </p>
                               ) : (
                                 <p className="text-sm text-gray-500 italic">Meal details unavailable</p>
                               )}
@@ -603,14 +611,21 @@ export function DietMoodPage({ user, onNavigate, onLogout, onOpenNotifications }
                         </div>
                       )}
 
-                      {/* Ayurvedic Analysis */}
+                      {/* Ayurvedic Analysis - 3 Points */}
                       {mealAnalysis.ayurvedic_analysis && (
                         <div className="p-4 bg-gradient-to-r from-purple-50 to-purple-100 border-l-4 border-purple-500 rounded-lg">
-                          <h4 className="font-bold text-base text-purple-900 mb-1">🌿 Ayurvedic Analysis</h4>
-                          <p className="text-sm text-purple-800">{mealAnalysis.ayurvedic_analysis.dosha_effects}</p>
-                          {mealAnalysis.ayurvedic_analysis.timing_advice && (
-                            <p className="text-xs text-purple-700 mt-1">⏰ {mealAnalysis.ayurvedic_analysis.timing_advice}</p>
-                          )}
+                          <h4 className="font-bold text-base text-purple-900 mb-2">🌿 Ayurvedic Analysis</h4>
+                          <div className="space-y-1">
+                            {mealAnalysis.ayurvedic_analysis.point1 && (
+                              <p className="text-sm text-purple-800">• {mealAnalysis.ayurvedic_analysis.point1}</p>
+                            )}
+                            {mealAnalysis.ayurvedic_analysis.point2 && (
+                              <p className="text-sm text-purple-800">• {mealAnalysis.ayurvedic_analysis.point2}</p>
+                            )}
+                            {mealAnalysis.ayurvedic_analysis.point3 && (
+                              <p className="text-sm text-purple-800">• {mealAnalysis.ayurvedic_analysis.point3}</p>
+                            )}
+                          </div>
                         </div>
                       )}
 
@@ -641,42 +656,24 @@ export function DietMoodPage({ user, onNavigate, onLogout, onOpenNotifications }
                         </div>
                       )}
 
-                      {/* Dietary Guidance */}
-                      {mealAnalysis.guidance && (
+                      {/* Dietary Guidance - 2 Food Tips */}
+                      {mealAnalysis.guidance && (mealAnalysis.guidance.food_tip_1 || mealAnalysis.guidance.food_tip_2) && (
                         <div className="p-4 bg-gradient-to-r from-yellow-50 to-yellow-100 border-l-4 border-yellow-500 rounded-lg">
-                          <h4 className="font-bold text-base text-yellow-900 mb-2">📋 Dietary Guidance</h4>
-                          <div className="grid grid-cols-2 gap-3">
-                            {mealAnalysis.guidance.foods_to_favor?.length > 0 && (
-                              <div>
-                                <p className="text-xs font-semibold text-green-800 mb-1">✓ Foods to Favor:</p>
-                                <ul className="text-xs text-green-700 space-y-0.5">
-                                  {mealAnalysis.guidance.foods_to_favor.slice(0, 3).map((food: string, i: number) => (
-                                    <li key={i}>• {food}</li>
-                                  ))}
-                                </ul>
+                          <h4 className="font-bold text-base text-yellow-900 mb-2">💡 Food Suggestions</h4>
+                          <div className="space-y-2">
+                            {mealAnalysis.guidance.food_tip_1 && (
+                              <div className="flex items-start gap-2">
+                                <span className="text-yellow-700 font-bold">1.</span>
+                                <p className="text-sm text-yellow-800">{mealAnalysis.guidance.food_tip_1}</p>
                               </div>
                             )}
-                            {mealAnalysis.guidance.foods_to_avoid?.length > 0 && (
-                              <div>
-                                <p className="text-xs font-semibold text-red-800 mb-1">✗ Foods to Avoid:</p>
-                                <ul className="text-xs text-red-700 space-y-0.5">
-                                  {mealAnalysis.guidance.foods_to_avoid.slice(0, 2).map((food: string, i: number) => (
-                                    <li key={i}>• {food}</li>
-                                  ))}
-                                </ul>
+                            {mealAnalysis.guidance.food_tip_2 && (
+                              <div className="flex items-start gap-2">
+                                <span className="text-yellow-700 font-bold">2.</span>
+                                <p className="text-sm text-yellow-800">{mealAnalysis.guidance.food_tip_2}</p>
                               </div>
                             )}
                           </div>
-                          {mealAnalysis.guidance.lifestyle_tips?.length > 0 && (
-                            <div className="mt-2 pt-2 border-t border-yellow-200">
-                              <p className="text-xs font-semibold text-yellow-800 mb-1">Lifestyle Tips:</p>
-                              <ul className="text-xs text-yellow-700">
-                                {mealAnalysis.guidance.lifestyle_tips.slice(0, 2).map((tip: string, i: number) => (
-                                  <li key={i}>• {tip}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
                         </div>
                       )}
                     </div>

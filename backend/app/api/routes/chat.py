@@ -169,33 +169,16 @@ async def send_message(
         except Exception as history_error:
             logger.warning(f"Could not load chat history: {history_error}")
         
-        # Contextual Emotion Detection
-        # 1. Get recent user messages for context
-        recent_user_msgs = [msg["content"] for msg in chat_history if msg["role"] == "user"][-5:]
-        
-        # 2. Detect emotion from the sequence
-        # For short greetings/messages, analyze WITHOUT context to avoid inheriting
-        # emotion from previous emotional messages
+        # Improved Emotion Detection - Analyze current message only for accuracy
+        # Context-free detection prevents emotion carryover from previous messages
         try:
             current_msg = message_req.content.strip()
-            is_short_message = len(current_msg) <= 15
-            is_greeting = current_msg.lower() in ['hi', 'hello', 'hey', 'hey there', 'hi there', 'hello there', 'greetings', 'good morning', 'good afternoon', 'good evening']
             
-            if (is_short_message or is_greeting) and len(recent_user_msgs) > 0:
-                # Analyze the current message ALONE, not with context
-                logger.info(f"[CHAT] Short/greeting message detected, analyzing without context")
-                emotion_data = emotion_service.detect_emotion(current_msg)
-            elif len(current_msg) < 5 and len(recent_user_msgs) == 0:
-                # Very short first message - use neutral
-                emotion_data = {
-                    'emotion_type': 'neutral',
-                    'confidence': 0.5,
-                    'all_scores': {'neutral': 1.0}
-                }
-            else:
-                # Regular message - use contextual detection
-                recent_user_msgs.append(current_msg)
-                emotion_data = emotion_service.detect_contextual_emotion(recent_user_msgs)
+            # Always analyze the current message ALONE for accurate emotion detection
+            # This prevents greetings from inheriting emotions from previous conversations
+            logger.info(f"[CHAT] Detecting emotion from current message only")
+            emotion_data = emotion_service.detect_emotion(current_msg, source="chat")
+            
         except Exception as emotion_detect_err:
             logger.warning(f"[CHAT] Emotion detection failed, using neutral: {emotion_detect_err}")
             emotion_data = {
@@ -260,32 +243,41 @@ async def send_message(
             msg_result = supabase.table("messages").insert(user_message_data).execute()
             logger.info(f"[CHAT] ✅ User message saved: {user_message_id}")
             
-            # Log emotion (don't fail if this errors)
-            try:
-                emotion_log = emotion_service.create_emotion_log(
-                    user_id=current_user_id,
-                    emotion_type=emotion_data['emotion_type'],
-                    confidence=emotion_data['confidence'],
-                    all_scores=emotion_data['all_scores'],
-                    source='chat_context',
-                    message_id=user_message_id
-                )
-                emotion_result = supabase.table("emotion_logs").insert(emotion_log).execute()
-                logger.info(f"[CHAT] ✅ Emotion logged from chat")
-            except Exception as emotion_err:
-                logger.warning(f"[CHAT] Failed to log emotion (non-critical): {emotion_err}")
+            # Log emotion and update aura asynchronously (don't block response)
+            # These are non-critical operations that can run in background
+            import asyncio
             
-            # Update Aura (don't fail if this errors)
-            try:
-                from app.services.aura_service import AuraService
-                aura_service = AuraService(supabase)
-                await aura_service.generate_daily_aura(current_user_id, datetime.utcnow().date())
-                logger.info(f"[CHAT] ✅ Aura updated")
-            except Exception as aura_err:
-                logger.warning(f"[CHAT] Failed to update aura (non-critical): {aura_err}")
+            async def background_tasks():
+                """Non-blocking background tasks"""
+                try:
+                    # Log emotion
+                    emotion_log = emotion_service.create_emotion_log(
+                        user_id=current_user_id,
+                        emotion_type=emotion_data['emotion_type'],
+                        confidence=emotion_data['confidence'],
+                        all_scores=emotion_data['all_scores'],
+                        source='chat_context',
+                        message_id=user_message_id
+                    )
+                    supabase.table("emotion_logs").insert(emotion_log).execute()
+                    logger.info(f"[CHAT] ✅ Emotion logged from chat")
+                except Exception as emotion_err:
+                    logger.warning(f"[CHAT] Failed to log emotion (non-critical): {emotion_err}")
+                
+                try:
+                    # Update Aura
+                    from app.services.aura_service import AuraService
+                    aura_service = AuraService(supabase)
+                    await aura_service.generate_daily_aura(current_user_id, datetime.utcnow().date())
+                    logger.info(f"[CHAT] ✅ Aura updated")
+                except Exception as aura_err:
+                    logger.warning(f"[CHAT] Failed to update aura (non-critical): {aura_err}")
+            
+            # Start background tasks without waiting
+            asyncio.create_task(background_tasks())
             
         except Exception as db_msg_err:
-            logger.error(f"Failed to save user message/aura to DB: {db_msg_err}", exc_info=True)
+            logger.error(f"Failed to save user message to DB: {db_msg_err}", exc_info=True)
         
         # Handle crisis if detected
         if is_crisis:
@@ -377,20 +369,32 @@ async def send_message(
             ai_result = supabase.table("messages").insert(ai_message_data).execute()
             logger.info(f"[CHAT] ✅ AI response saved: {ai_message_id}")
             
-            # Extract and store recommendations from AI response using Gemini
-            try:
-                from app.services.recommendation_service import recommendation_service
-                extracted_recs = await recommendation_service.extract_and_store_recommendations_from_chat(
-                    user_id=current_user_id,
-                    message_text=ai_response,
-                    timestamp=datetime.utcnow()
-                )
-                if extracted_recs:
-                    logger.info(f"[CHAT] ✅ Extracted and stored {len(extracted_recs)} recommendations")
-                else:
-                    logger.info(f"[CHAT] ℹ️ No recommendations found in AI response")
-            except Exception as rec_err:
-                logger.warning(f"[CHAT] Failed to extract recommendations (non-critical): {rec_err}")
+            # Extract recommendations asynchronously (don't block response)
+            import asyncio
+            
+            async def extract_recommendations():
+                """Non-blocking recommendation extraction"""
+                try:
+                    from app.services.recommendation_service import recommendation_service
+                    logger.info(f"[CHAT] 🔍 Starting recommendation extraction from AI response...")
+                    
+                    extracted_recs = await recommendation_service.extract_and_store_recommendations_from_chat(
+                        user_id=current_user_id,
+                        message_text=ai_response,
+                        timestamp=datetime.utcnow()
+                    )
+                    
+                    if extracted_recs:
+                        logger.info(f"[CHAT] ✅ Extracted and stored {len(extracted_recs)} recommendations")
+                        for rec in extracted_recs:
+                            logger.info(f"[CHAT] ✅ Rec: {rec.category} - {rec.title}")
+                    else:
+                        logger.info(f"[CHAT] ℹ️ No recommendations found in AI response")
+                except Exception as rec_err:
+                    logger.error(f"[CHAT] ❌ Failed to extract recommendations: {rec_err}", exc_info=True)
+            
+            # Start recommendation extraction without waiting
+            asyncio.create_task(extract_recommendations())
                 
         except Exception as db_ai_err:
             logger.error(f"Failed to save AI response to DB: {db_ai_err}", exc_info=True)

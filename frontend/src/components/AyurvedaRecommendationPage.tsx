@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
+import {
   Leaf,
   Calendar,
   Clock,
@@ -38,6 +38,7 @@ interface AyurvedaRecommendationPageProps {
     category?: string;
     source?: string;
   }) => void;
+  refreshTrigger?: number;
 }
 
 export function AyurvedaRecommendationPage({
@@ -45,7 +46,8 @@ export function AyurvedaRecommendationPage({
   onNavigate,
   onLogout,
   onOpenNotifications,
-  onOpenPractice
+  onOpenPractice,
+  refreshTrigger
 }: AyurvedaRecommendationPageProps) {
   const [ayurvedaRecommendations, setAyurvedaRecommendations] = useState<Recommendation[]>([]);
   const [lifestyleRecommendations, setLifestyleRecommendations] = useState<Recommendation[]>([]);
@@ -63,7 +65,15 @@ export function AyurvedaRecommendationPage({
   useEffect(() => {
     loadRecommendations();
   }, [selectedDate]);
-  
+
+  // Reload when refreshTrigger changes (after practice completion)
+  useEffect(() => {
+    if (refreshTrigger && refreshTrigger > 0) {
+      console.log('🔄 Refresh trigger received, reloading recommendations');
+      loadRecommendations();
+    }
+  }, [refreshTrigger]);
+
   // Auto-refresh to current day when component mounts or becomes visible
   useEffect(() => {
     const today = new Date().toISOString().split('T')[0];
@@ -71,7 +81,7 @@ export function AyurvedaRecommendationPage({
       console.log('📅 Updating to today\'s date:', today);
       setSelectedDate(today);
     }
-    
+
     // Set up interval to check if date changed (for overnight usage)
     const checkDateInterval = setInterval(() => {
       const currentToday = new Date().toISOString().split('T')[0];
@@ -80,7 +90,7 @@ export function AyurvedaRecommendationPage({
         setSelectedDate(currentToday);
       }
     }, 60000); // Check every minute
-    
+
     return () => clearInterval(checkDateInterval);
   }, []);
 
@@ -98,7 +108,7 @@ export function AyurvedaRecommendationPage({
       setAyurvedaRecommendations(ayurvedaRecs);
       setLifestyleRecommendations(lifestyleRecs);
       setDietRecommendations(dietRecs);
-      
+
       // Filter grouped recommendations to Ayurvedic categories
       const ayurvedicCategories = ['ayurveda', 'lifestyle', 'diet'];
       const filteredGrouped = {
@@ -118,7 +128,7 @@ export function AyurvedaRecommendationPage({
   const handleRefresh = () => {
     loadRecommendations();
   };
-  
+
   // Deduplicate recommendations by content similarity and title
   const deduplicateRecommendations = (recommendations: Recommendation[]) => {
     const seen = new Set();
@@ -127,7 +137,7 @@ export function AyurvedaRecommendationPage({
       const normalizedTitle = rec.title.toLowerCase().trim();
       const normalizedContent = rec.content.toLowerCase().trim().substring(0, 100);
       const key = `${normalizedTitle}|${normalizedContent}`;
-      
+
       if (seen.has(key)) {
         console.log('🔄 Skipping duplicate:', rec.title);
         return false;
@@ -136,7 +146,7 @@ export function AyurvedaRecommendationPage({
       return true;
     });
   };
-  
+
   // Group recommendations by source (fallback when API grouping fails)
   const groupRecommendationsBySource = (recommendations: Recommendation[]) => {
     const grouped = { chat: [], device: [], system: [] } as RecommendationsBySource;
@@ -153,11 +163,11 @@ export function AyurvedaRecommendationPage({
     const date = new Date(dateStr);
     const today = new Date();
     const isToday = date.toDateString() === today.toDateString();
-    
+
     if (isToday) {
       return `Today, ${date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`;
     }
-    
+
     return date.toLocaleDateString('en-US', {
       weekday: 'long',
       year: 'numeric',
@@ -168,7 +178,7 @@ export function AyurvedaRecommendationPage({
 
   // Ensure we're showing current day by default
   const isToday = selectedDate === new Date().toISOString().split('T')[0];
-  
+
   // Get source display info with proper icons and colors
   const getSourceIcon = (source: string) => {
     switch (source) {
@@ -182,7 +192,7 @@ export function AyurvedaRecommendationPage({
         return <Star className="w-4 h-4 text-gray-500" />;
     }
   };
-  
+
   const getSourceLabel = (source: string) => {
     switch (source) {
       case 'chat':
@@ -195,7 +205,7 @@ export function AyurvedaRecommendationPage({
         return source;
     }
   };
-  
+
   const getSourceColor = (source: string) => {
     switch (source) {
       case 'chat':
@@ -239,62 +249,99 @@ export function AyurvedaRecommendationPage({
     }
   };
 
-  const RecommendationCard = ({ recommendation }: { recommendation: Recommendation }) => (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-    >
-      <Card className={`hover:shadow-md transition-shadow duration-200 border-l-4 ${getCategoryColor(recommendation.category)}`}>
-        <CardHeader className="pb-2">
-          <div className="flex items-start justify-between">
-            <div className="flex items-center gap-2">
-              {getCategoryIcon(recommendation.category)}
-              <CardTitle className="text-lg font-semibold text-gray-900">
-                {recommendation.title}
-              </CardTitle>
+  const RecommendationCard = ({ recommendation }: { recommendation: Recommendation }) => {
+    const isCompleted = (recommendation as any).Completed === 'YES' || recommendation.meta?.completed === true;
+
+    const handlePracticeClick = () => {
+      if (isCompleted) {
+        return; // Prevent action if completed
+      }
+      onOpenPractice?.({
+        id: recommendation.id,
+        title: recommendation.title,
+        content: recommendation.content,
+        category: recommendation.category,
+        source: recommendation.source
+      });
+    };
+
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+      >
+        <Card className={`hover:shadow-md transition-shadow duration-200 border-l-4 ${isCompleted ? 'border-l-green-500 bg-green-50/50' : getCategoryColor(recommendation.category)}`}>
+          <CardHeader className="pb-2">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-2 flex-wrap">
+                {getCategoryIcon(recommendation.category)}
+                <CardTitle className={`text-lg font-semibold ${isCompleted ? 'text-gray-600' : 'text-gray-900'}`}>
+                  {recommendation.title}
+                </CardTitle>
+                {isCompleted && (
+                  <Badge className="text-xs bg-green-500 text-white font-semibold">
+                    ✓ Completed
+                  </Badge>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Badge variant="outline" className="text-xs">
+                  {recommendation.category}
+                </Badge>
+                <Badge className={`text-xs ${getSourceColor(recommendation.source)}`}>
+                  {recommendation.source}
+                </Badge>
+              </div>
             </div>
-            <div className="flex gap-2">
-              <Badge variant="outline" className="text-xs">
-                {recommendation.category}
-              </Badge>
-              <Badge className={`text-xs ${getSourceColor(recommendation.source)}`}>
-                {recommendation.source}
-              </Badge>
-            </div>
-          </div>
-          <div className="flex items-center gap-1 text-xs text-gray-500">
-            <Clock className="w-3 h-3" />
-            {new Date(recommendation.created_at).toLocaleTimeString('en-US', { 
-              hour: '2-digit', 
-              minute: '2-digit' 
-            })}
-          </div>
-        </CardHeader>
-        <CardContent>
-          <p className="text-gray-700 leading-relaxed whitespace-pre-line mb-4">
-            {recommendation.content}
-          </p>
-          {onOpenPractice && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onOpenPractice({
-                id: recommendation.id,
-                title: recommendation.title,
-                content: recommendation.content,
-                category: recommendation.category,
-                source: recommendation.source
+            <div className="flex items-center gap-1 text-xs text-gray-500">
+              <Clock className="w-3 h-3" />
+              {new Date(recommendation.created_at).toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit'
               })}
-              className="w-full bg-gradient-to-r from-green-500 to-emerald-500 text-white hover:from-green-600 hover:to-emerald-600 border-0"
-            >
-              <Play className="w-4 h-4 mr-2" />
-              Start Practice
-            </Button>
-          )}
-        </CardContent>
-      </Card>
-    </motion.div>
-  );
+            </div>
+          </CardHeader>
+          <CardContent>
+            <p className={`leading-relaxed whitespace-pre-line mb-4 ${isCompleted ? 'text-gray-500' : 'text-gray-700'}`}>
+              {recommendation.content}
+            </p>
+            {onOpenPractice && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handlePracticeClick}
+                style={!isCompleted ? {
+                  background: '#9b33e1',
+                  color: 'white',
+                  border: 'none',
+                  fontWeight: '600',
+                  boxShadow: '0 2px 8px rgba(155, 51, 225, 0.3)',
+                  transition: 'all 0.2s ease'
+                } : undefined}
+                className={`w-full ${isCompleted ? 'bg-green-100 text-green-700 cursor-not-allowed hover:bg-green-100' : 'hover:brightness-110 hover:shadow-lg'} ${!isCompleted ? 'border-0' : ''}`}
+                disabled={isCompleted}
+                onMouseEnter={(e) => {
+                  if (!isCompleted) {
+                    e.currentTarget.style.background = '#8a2bc7';
+                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(155, 51, 225, 0.4)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isCompleted) {
+                    e.currentTarget.style.background = '#9b33e1';
+                    e.currentTarget.style.boxShadow = '0 2px 8px rgba(155, 51, 225, 0.3)';
+                  }
+                }}
+              >
+                <Play className="w-4 h-4 mr-2" />
+                {isCompleted ? '✓ Completed - Cannot Retake' : 'Start Practice'}
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      </motion.div>
+    );
+  };
 
   const totalRecommendations = ayurvedaRecommendations.length + lifestyleRecommendations.length + dietRecommendations.length;
 
@@ -326,7 +373,7 @@ export function AyurvedaRecommendationPage({
             <p className="text-gray-600 max-w-2xl mx-auto">
               Personalized Ayurvedic guidance, lifestyle suggestions, and dietary recommendations based on your wellness journey and dosha.
             </p>
-            
+
             {/* Today's Summary */}
             {isToday && !loading && totalRecommendations > 0 && (
               <div className="mt-4 p-4 bg-green-50 rounded-lg border border-green-200 max-w-3xl mx-auto">
@@ -420,9 +467,9 @@ export function AyurvedaRecommendationPage({
                     </div>
                     <div className="space-y-4">
                       {ayurvedaRecommendations.map((recommendation) => (
-                        <RecommendationCard 
-                          key={recommendation.id} 
-                          recommendation={recommendation} 
+                        <RecommendationCard
+                          key={recommendation.id}
+                          recommendation={recommendation}
                         />
                       ))}
                     </div>
@@ -439,9 +486,9 @@ export function AyurvedaRecommendationPage({
                     </div>
                     <div className="space-y-4">
                       {lifestyleRecommendations.map((recommendation) => (
-                        <RecommendationCard 
-                          key={recommendation.id} 
-                          recommendation={recommendation} 
+                        <RecommendationCard
+                          key={recommendation.id}
+                          recommendation={recommendation}
                         />
                       ))}
                     </div>
@@ -458,9 +505,9 @@ export function AyurvedaRecommendationPage({
                     </div>
                     <div className="space-y-4">
                       {dietRecommendations.map((recommendation) => (
-                        <RecommendationCard 
-                          key={recommendation.id} 
-                          recommendation={recommendation} 
+                        <RecommendationCard
+                          key={recommendation.id}
+                          recommendation={recommendation}
                         />
                       ))}
                     </div>
@@ -563,42 +610,42 @@ export function AyurvedaRecommendationPage({
                 )}
 
                 {/* No recommendations */}
-                {recommendationsBySource.chat.length === 0 && 
-                 recommendationsBySource.device.length === 0 && 
-                 recommendationsBySource.system.length === 0 && (
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="text-center py-12"
-                  >
-                    <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
-                      <Heart className="w-8 h-8 text-gray-400" />
-                    </div>
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">
-                      No recommendations available
-                    </h3>
-                    <p className="text-gray-600 mb-4">
-                      Recommendations will appear here after you engage with the wellness features.
-                    </p>
-                    <div className="flex flex-col sm:flex-row gap-2 justify-center">
-                      <Button
-                        onClick={() => onNavigate('chat')}
-                        className="bg-blue-500 hover:bg-blue-600"
-                      >
-                        <MessageCircle className="w-4 h-4 mr-2" />
-                        Start Chat
-                      </Button>
-                      <Button
-                        onClick={() => onNavigate('device')}
-                        variant="outline"
-                        className="border-green-500 text-green-600 hover:bg-green-50"
-                      >
-                        <Activity className="w-4 h-4 mr-2" />
-                        Log Health Data
-                      </Button>
-                    </div>
-                  </motion.div>
-                )}
+                {recommendationsBySource.chat.length === 0 &&
+                  recommendationsBySource.device.length === 0 &&
+                  recommendationsBySource.system.length === 0 && (
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="text-center py-12"
+                    >
+                      <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+                        <Heart className="w-8 h-8 text-gray-400" />
+                      </div>
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">
+                        No recommendations available
+                      </h3>
+                      <p className="text-gray-600 mb-4">
+                        Recommendations will appear here after you engage with the wellness features.
+                      </p>
+                      <div className="flex flex-col sm:flex-row gap-2 justify-center">
+                        <Button
+                          onClick={() => onNavigate('chat')}
+                          className="bg-blue-500 hover:bg-blue-600"
+                        >
+                          <MessageCircle className="w-4 h-4 mr-2" />
+                          Start Chat
+                        </Button>
+                        <Button
+                          onClick={() => onNavigate('device')}
+                          variant="outline"
+                          className="border-green-500 text-green-600 hover:bg-green-50"
+                        >
+                          <Activity className="w-4 h-4 mr-2" />
+                          Log Health Data
+                        </Button>
+                      </div>
+                    </motion.div>
+                  )}
               </div>
             )}
           </TabsContent>

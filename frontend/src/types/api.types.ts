@@ -422,6 +422,7 @@ export interface Recommendation {
   content: string;
   created_at: string; // ISO datetime string
   meta?: Record<string, any>;
+  Completed?: string; // 'YES' or 'NO'
 }
 
 export interface DailyRecommendationsResponse {

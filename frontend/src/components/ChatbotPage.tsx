@@ -444,7 +444,7 @@ export function ChatbotPage({ user, onNavigate, onLogout, onOpenNotifications }:
             <div className="flex gap-3">
               <Button
                 onClick={() => setShowCrisisModal(false)}
-                className="flex-1 bg-red-600 hover:bg-red-700 text-white text-lg py-6"
+                className="flex-1 bg-red-600 hover:bg-red-700 text-black text-lg py-6 border-4 border-red-800 shadow-xl hover:shadow-2xl transition-all duration-200 font-bold"
               >
                 I Understand
               </Button>
@@ -454,7 +454,7 @@ export function ChatbotPage({ user, onNavigate, onLogout, onOpenNotifications }:
                   handleSendMessage('Yes, please help me find local resources');
                 }}
                 variant="outline"
-                className="flex-1 border-2 border-red-600 text-red-600 hover:bg-red-50 text-lg py-6"
+                className="flex-1 border-4 border-red-600 text-red-600 hover:bg-red-50 text-lg py-6 font-bold shadow-lg hover:shadow-xl transition-all duration-200"
               >
                 Find Local Resources
               </Button>

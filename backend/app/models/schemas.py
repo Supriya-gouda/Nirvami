@@ -199,8 +199,8 @@ class WellnessScore(BaseModel):
 
 class DoshaAnswer(BaseModel):
     """Single question answer for dosha quiz."""
-    question_id: int
-    answer_value: int  # Score value (e.g., 1-5 or dosha score)
+    question_id: str  # Question identifier (e.g., 'q1', 'q2')
+    selected_dosha: Literal["vata", "pitta", "kapha"]  # Which dosha option was selected
 
 
 class DoshaAssessmentRequest(BaseModel):
@@ -210,12 +210,13 @@ class DoshaAssessmentRequest(BaseModel):
 
 class DoshaAssessmentResponse(BaseModel):
     """Response from dosha assessment."""
-    vata_score: int
-    pitta_score: int
-    kapha_score: int
-    dominant_dosha: Literal["vata", "pitta", "kapha"]
-    primary_dosha: Optional[str] = None  # For backward compatibility
-    secondary_dosha: Optional[str] = None
+    vata_percent: float
+    pitta_percent: float
+    kapha_percent: float
+    primary_dosha: Literal["vata", "pitta", "kapha"]
+    secondary_dosha: Optional[Literal["vata", "pitta", "kapha"]] = None
+    result_type: Literal["single", "dual", "tri"]  # Prakriti type
+    dominant_dosha: Optional[str] = None  # For backward compatibility
 
 
 class DoshaQuizRequest(BaseModel):
@@ -344,7 +345,9 @@ class AnalyticsPeriod(str, Enum):
 
 class EmotionTrendData(BaseModel):
     date: str
-    emotion_scores: Dict[str, float]
+    positive: float  # Positive emotion percentage (0-100)
+    negative: float  # Negative emotion percentage (0-100)
+    neutral: float   # Neutral emotion percentage (0-100)
 
 
 class AnalyticsResponse(BaseModel):
@@ -422,6 +425,7 @@ class RecommendationBase(BaseModel):
     title: str
     content: str
     meta: Dict[str, Any] = {}
+    Completed: Optional[str] = None  # "YES" or "NO" or None
 
 
 class RecommendationCreate(RecommendationBase):

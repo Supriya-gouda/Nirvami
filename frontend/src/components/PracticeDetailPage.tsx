@@ -38,6 +38,12 @@ interface PracticeDetailPageProps {
   onClose: () => void;
 }
 
+interface PracticeStep {
+  instruction: string;
+  duration_seconds?: number;
+  duration_text?: string;
+}
+
 interface PracticeContent {
   practice_type: string;
   practice_name: string;
@@ -51,6 +57,7 @@ interface PracticeContent {
   youtube_title?: string;
   avatar_animation_steps?: any;
   tts_instructions: string[];
+  steps?: PracticeStep[];
   dosha_tags: string[];
   emotion_tags: string[];
   category: string;
@@ -76,8 +83,11 @@ export function PracticeDetailPage({
   const [elapsedTime, setElapsedTime] = useState(0);
   const [isCompleted, setIsCompleted] = useState(false);
   const [satisfactionRating, setSatisfactionRating] = useState(0);
+  const [stepCountdown, setStepCountdown] = useState(0); // Countdown timer for current step
   const speechSynthesisRef = useRef<SpeechSynthesisUtterance | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const autoAdvanceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const stepCountdownRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     loadPracticeContent();
@@ -85,6 +95,8 @@ export function PracticeDetailPage({
       // Cleanup
       stopSpeech();
       if (timerRef.current) clearInterval(timerRef.current);
+      if (autoAdvanceTimerRef.current) clearTimeout(autoAdvanceTimerRef.current);
+      if (stepCountdownRef.current) clearInterval(stepCountdownRef.current);
     };
   }, [recommendation]);
 
@@ -107,7 +119,7 @@ export function PracticeDetailPage({
   const loadPracticeContent = async () => {
     try {
       setLoading(true);
-      
+
       // Try to fetch enhanced content from database
       try {
         const response = await api.getPracticeContent(recommendation.title);
@@ -120,8 +132,17 @@ export function PracticeDetailPage({
       } catch (error) {
         console.log('No enhanced content found, using recommendation content');
       }
-      
+
       // Fallback: Create dynamic practice from recommendation
+      const parsedSteps = parseStepsFromContent(recommendation.content);
+
+      // Add relaxation step at the end
+      parsedSteps.push({
+        instruction: 'Now Release and Relax',
+        duration_seconds: 10,
+        duration_text: 'for 10 seconds'
+      });
+
       const dynamicPractice: PracticeContent = {
         practice_type: recommendation.category || 'lifestyle',
         practice_name: recommendation.title,
@@ -130,13 +151,14 @@ export function PracticeDetailPage({
         difficulty: 'beginner',
         duration_min: 5,
         duration_max: 15,
-        tts_instructions: splitIntoInstructions(recommendation.content),
+        tts_instructions: parsedSteps.map(s => `${s.instruction} ${s.duration_text}`),
+        steps: parsedSteps,
         dosha_tags: [],
         emotion_tags: [],
         category: recommendation.category || 'wellness',
         icon: '🧘'
       };
-      
+
       setPractice(dynamicPractice);
       setHasEnhancedContent(false);
       setLoading(false);
@@ -150,10 +172,10 @@ export function PracticeDetailPage({
   const extractBenefitsFromContent = (content: string): string[] => {
     // Look for bullet points, numbered lists, or sentences that suggest benefits
     const benefits: string[] = [];
-    
+
     // Split by sentences
     const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 0);
-    
+
     // Take first 3-4 substantial sentences as benefits
     sentences.slice(0, 4).forEach(sentence => {
       const trimmed = sentence.trim();
@@ -161,19 +183,119 @@ export function PracticeDetailPage({
         benefits.push(trimmed);
       }
     });
-    
+
     return benefits.length > 0 ? benefits : ['Promotes overall wellness', 'Supports mind-body balance'];
+  };
+
+  // Helper function to parse steps from recommendation content
+  const parseStepsFromContent = (content: string): PracticeStep[] => {
+    const steps: PracticeStep[] = [];
+
+    // Try to parse numbered steps (e.g., "1. instruction", "Step 1:", etc.)
+    const stepMatches = content.match(/(?:Step\s*\d+[:.)]?|\d+[:.)]?)\s*([^\n]+(?:\n(?!\d+[:.)]|Step\s*\d+)[^\n]+)*)/gi);
+
+    if (stepMatches && stepMatches.length > 0) {
+      stepMatches.forEach((match, idx) => {
+        // Remove step numbering
+        let instruction = match.replace(/^(?:Step\s*\d+[:.)]?|\d+[:.)]?)\s*/i, '').trim();
+
+        // Extract duration if mentioned (including ranges like "5 to 15 min", "5-15 min")
+        let durationText = '';
+        let durationSeconds = 0;
+
+        // First try to match ranges: "5 to 15 min", "5-15 minutes", "2 to 3 seconds"
+        const rangeMatch = instruction.match(/(?:for|hold(?:\s+for)?)\s*(\d+)\s*(?:to|-|–)\s*(\d+)\s*(min(?:ute)?s?|sec(?:ond)?s?)/i);
+        if (rangeMatch) {
+          const minValue = parseInt(rangeMatch[1]);
+          const maxValue = parseInt(rangeMatch[2]);
+          const unit = rangeMatch[3].toLowerCase();
+
+          // Calculate average for countdown
+          const avgValue = Math.round((minValue + maxValue) / 2);
+          durationSeconds = unit.startsWith('min') ? avgValue * 60 : avgValue;
+
+          // Keep original range text for TTS (e.g., "for 5 to 15 minutes")
+          const unitText = unit.startsWith('min') ? 'minute' : 'second';
+          durationText = `for ${minValue} to ${maxValue} ${unitText}${maxValue > 1 ? 's' : ''}`;
+        } else {
+          // Try single duration: "for 5 minutes", "30 seconds"
+          const durationMatch = instruction.match(/(?:for|hold(?:\s+for)?)\s*(\d+)\s*(min(?:ute)?s?|sec(?:ond)?s?)/i);
+          if (durationMatch) {
+            const value = parseInt(durationMatch[1]);
+            const unit = durationMatch[2].toLowerCase();
+            durationSeconds = unit.startsWith('min') ? value * 60 : value;
+            durationText = `for ${value} ${unit.startsWith('min') ? 'minute' : 'second'}${value > 1 ? 's' : ''}`;
+          } else {
+            // Default durations based on step position
+            durationSeconds = idx === 0 ? 10 : 30; // First step shorter
+            durationText = `for ${durationSeconds} seconds`;
+          }
+        }
+
+        steps.push({
+          instruction: instruction.trim(),
+          duration_seconds: durationSeconds,
+          duration_text: durationText
+        });
+      });
+    } else {
+      // Fallback: split by periods
+      const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 20);
+      sentences.forEach((sentence, idx) => {
+        const durationSeconds = idx === 0 ? 10 : 30;
+        steps.push({
+          instruction: sentence.trim(),
+          duration_seconds: durationSeconds,
+          duration_text: `for ${durationSeconds} seconds`
+        });
+      });
+    }
+
+    return steps.length > 0 ? steps : [{
+      instruction: content,
+      duration_seconds: 60,
+      duration_text: 'for 1 minute'
+    }];
+  };
+
+  // Helper function to get Indian female voice
+  const getIndianFemaleVoice = (): SpeechSynthesisVoice | null => {
+    const voices = window.speechSynthesis.getVoices();
+
+    // Priority 1: Look for Google Hindi or Indian English female voices
+    const preferredVoices = [
+      'Google हिन्दी',
+      'Microsoft Heera - English (India)',
+      'Microsoft Heera Desktop - English (India)',
+      'Google UK English Female',
+      'Google US English Female'
+    ];
+
+    for (const voiceName of preferredVoices) {
+      const voice = voices.find(v => v.name.includes(voiceName));
+      if (voice) return voice;
+    }
+
+    // Priority 2: Any Indian English voice (en-IN)
+    const indianVoice = voices.find(v => v.lang.startsWith('en-IN') || v.lang.startsWith('hi-IN'));
+    if (indianVoice) return indianVoice;
+
+    // Priority 3: Any voice with "Heera" or Indian-sounding names
+    const indianNamedVoice = voices.find(v =>
+      v.name.includes('Heera') ||
+      v.name.includes('Ravi') ||
+      v.name.includes('Swara')
+    );
+    if (indianNamedVoice) return indianNamedVoice;
+
+    // Fallback: Use default voice
+    return voices[0] || null;
   };
 
   // Helper function to split content into TTS instructions
   const splitIntoInstructions = (content: string): string[] => {
-    // Split by sentences and filter
-    const instructions = content
-      .split(/[.!?]+/)
-      .map(s => s.trim())
-      .filter(s => s.length > 20 && s.length < 200);
-    
-    return instructions.length > 0 ? instructions : [content];
+    const steps = parseStepsFromContent(content);
+    return steps.map(step => `${step.instruction} ${step.duration_text}`);
   };
 
   const startPractice = () => {
@@ -187,6 +309,16 @@ export function PracticeDetailPage({
   const pausePractice = () => {
     setIsPracticing(false);
     stopSpeech();
+
+    // Clear timers when pausing
+    if (autoAdvanceTimerRef.current) {
+      clearTimeout(autoAdvanceTimerRef.current);
+      autoAdvanceTimerRef.current = null;
+    }
+    if (stepCountdownRef.current) {
+      clearInterval(stepCountdownRef.current);
+      stepCountdownRef.current = null;
+    }
   };
 
   const resumePractice = () => {
@@ -198,19 +330,48 @@ export function PracticeDetailPage({
     setIsPracticing(false);
     setCurrentStep(0);
     setElapsedTime(0);
+    setStepCountdown(0);
     setPracticeStartTime(null);
     stopSpeech();
+
+    // Clear timers
+    if (autoAdvanceTimerRef.current) {
+      clearTimeout(autoAdvanceTimerRef.current);
+      autoAdvanceTimerRef.current = null;
+    }
+    if (stepCountdownRef.current) {
+      clearInterval(stepCountdownRef.current);
+      stepCountdownRef.current = null;
+    }
   };
 
   const nextStep = () => {
     if (!practice) return;
-    
-    stopSpeech();
-    
+
+    // Clear any pending timers before moving to next step
+    if (autoAdvanceTimerRef.current) {
+      clearTimeout(autoAdvanceTimerRef.current);
+      autoAdvanceTimerRef.current = null;
+    }
+    if (stepCountdownRef.current) {
+      clearInterval(stepCountdownRef.current);
+      stepCountdownRef.current = null;
+    }
+
+    // Cancel any ongoing speech
+    window.speechSynthesis.cancel();
+    setIsSpeaking(false);
+    setStepCountdown(0);
+
     if (currentStep < practice.tts_instructions.length - 1) {
       const next = currentStep + 1;
       setCurrentStep(next);
-      speakInstruction(next);
+      // Use setTimeout to ensure state has updated before speaking
+      setTimeout(() => {
+        if (isPracticing) {
+          speakInstruction(next);
+        }
+      }, 100);
     } else {
       // Completed all steps
       completePractice();
@@ -222,32 +383,112 @@ export function PracticeDetailPage({
 
     stopSpeech();
 
-    const utterance = new SpeechSynthesisUtterance(practice.tts_instructions[stepIndex]);
-    utterance.rate = 0.9; // Slightly slower for clarity
+    // Clear any existing timers
+    if (autoAdvanceTimerRef.current) {
+      clearTimeout(autoAdvanceTimerRef.current);
+      autoAdvanceTimerRef.current = null;
+    }
+    if (stepCountdownRef.current) {
+      clearInterval(stepCountdownRef.current);
+      stepCountdownRef.current = null;
+    }
+
+    // Get the step duration in seconds (exact duration from the parsed step)
+    let stepDurationSeconds = 30; // Default 30 seconds
+    if (practice.steps && practice.steps[stepIndex]?.duration_seconds) {
+      stepDurationSeconds = practice.steps[stepIndex].duration_seconds!;
+    }
+
+    // Get the full instruction with duration
+    const fullInstruction = practice.tts_instructions[stepIndex];
+
+    // Create utterance with step number announcement
+    const stepAnnouncement = `Step ${stepIndex + 1}. ${fullInstruction}`;
+    const utterance = new SpeechSynthesisUtterance(stepAnnouncement);
+
+    // Set Indian female voice
+    const indianVoice = getIndianFemaleVoice();
+    if (indianVoice) {
+      utterance.voice = indianVoice;
+    }
+
+    utterance.rate = 0.85; // Slower for better clarity with durations
     utterance.pitch = 1.0;
     utterance.volume = 1.0;
 
     utterance.onstart = () => setIsSpeaking(true);
     utterance.onend = () => {
       setIsSpeaking(false);
-      // Auto-advance to next step after speaking (with 2 second pause)
-      if (isPracticing) {
-        setTimeout(() => {
-          if (stepIndex < practice.tts_instructions.length - 1) {
-            nextStep();
+
+      // Start countdown timer for this step
+      setStepCountdown(stepDurationSeconds);
+
+      // Use interval to decrement countdown
+      let timeRemaining = stepDurationSeconds;
+      stepCountdownRef.current = setInterval(() => {
+        timeRemaining--;
+        setStepCountdown(timeRemaining);
+
+        if (timeRemaining <= 0) {
+          if (stepCountdownRef.current) {
+            clearInterval(stepCountdownRef.current);
+            stepCountdownRef.current = null;
           }
-        }, 2000);
+        }
+      }, 1000);
+
+      // Set auto-advance timer using exact step duration
+      autoAdvanceTimerRef.current = setTimeout(() => {
+        // Clear countdown timer before advancing
+        if (stepCountdownRef.current) {
+          clearInterval(stepCountdownRef.current);
+          stepCountdownRef.current = null;
+        }
+
+        if (stepIndex < practice.tts_instructions.length - 1) {
+          nextStep();
+        } else {
+          // Last step (relaxation) - complete the practice
+          completePractice();
+        }
+      }, stepDurationSeconds * 1000);
+    };
+    utterance.onerror = (event) => {
+      console.error('Speech synthesis error:', event);
+      setIsSpeaking(false);
+      // Still advance to next step even if speech fails
+      if (!autoAdvanceTimerRef.current && stepIndex < practice.tts_instructions.length - 1) {
+        setTimeout(() => nextStep(), 1000);
       }
     };
-    utterance.onerror = () => setIsSpeaking(false);
 
     speechSynthesisRef.current = utterance;
-    window.speechSynthesis.speak(utterance);
+
+    // Ensure voices are loaded before speaking
+    if (window.speechSynthesis.getVoices().length === 0) {
+      window.speechSynthesis.addEventListener('voiceschanged', () => {
+        const voice = getIndianFemaleVoice();
+        if (voice) utterance.voice = voice;
+        window.speechSynthesis.speak(utterance);
+      }, { once: true });
+    } else {
+      window.speechSynthesis.speak(utterance);
+    }
   };
 
   const stopSpeech = () => {
     window.speechSynthesis.cancel();
     setIsSpeaking(false);
+
+    // Clear timers when speech is manually stopped
+    if (autoAdvanceTimerRef.current) {
+      clearTimeout(autoAdvanceTimerRef.current);
+      autoAdvanceTimerRef.current = null;
+    }
+    if (stepCountdownRef.current) {
+      clearInterval(stepCountdownRef.current);
+      stepCountdownRef.current = null;
+    }
   };
 
   const toggleSpeech = () => {
@@ -272,7 +513,7 @@ export function PracticeDetailPage({
 
     try {
       const durationMinutes = Math.ceil(elapsedTime / 60);
-      
+
       await api.createPracticeSession({
         practice_type: practice.practice_type,
         practice_name: practice.practice_name,
@@ -442,16 +683,45 @@ export function PracticeDetailPage({
                     </div>
                   )}
 
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-semibold">
-                      {hasEnhancedContent ? 'Step-by-Step Instructions' : 'How to Practice'}
-                    </h3>
-                    <ol className="list-decimal list-inside space-y-2">
-                      {practice.tts_instructions.map((instruction, index) => (
-                        <li key={index} className="text-gray-700">{instruction}</li>
-                      ))}
-                    </ol>
-                  </div>
+                  {/* Step-by-step guide - only show if not already shown above */}
+                  {!hasEnhancedContent && (
+                    <div className="space-y-4 mt-6">
+                      <h3 className="text-lg font-semibold flex items-center gap-2">
+                        <Activity className="w-5 h-5 text-purple-600" />
+                        How to Practice
+                      </h3>
+                      <ol className="space-y-3">
+                        {practice.steps ? practice.steps.map((step, index) => (
+                          <motion.li
+                            key={index}
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: index * 0.1 }}
+                            className="flex gap-3 p-3 bg-purple-50 rounded-lg border border-purple-100"
+                          >
+                            <span className="flex-shrink-0 w-8 h-8 bg-purple-500 text-white rounded-full flex items-center justify-center font-semibold">
+                              {index + 1}
+                            </span>
+                            <div className="flex-1">
+                              <p className="text-gray-800">{step.instruction}</p>
+                              {step.duration_text && (
+                                <p className="text-sm text-purple-600 mt-1 flex items-center gap-1">
+                                  <Clock className="w-3 h-3" />
+                                  {step.duration_text}
+                                </p>
+                              )}
+                            </div>
+                          </motion.li>
+                        )) : practice.tts_instructions.map((instruction, index) => (
+                          <li key={index} className="flex gap-2 text-gray-700">
+                            <span className="font-semibold text-purple-600">{index + 1}.</span>
+                            {instruction}
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+                  )}
+
 
                   {/* Show benefits if available */}
                   {practice.benefits && practice.benefits.length > 0 && (
@@ -494,34 +764,126 @@ export function PracticeDetailPage({
                       <div className="flex items-center gap-4">
                         <div className="flex items-center gap-2 text-lg font-semibold">
                           <Clock className="w-5 h-5" />
-                          {formatTime(elapsedTime)}
+                          {stepCountdown > 0 ? (
+                            <span className="text-purple-600">
+                              {Math.floor(stepCountdown / 60)}:{String(stepCountdown % 60).padStart(2, '0')}
+                            </span>
+                          ) : (
+                            <span className="text-gray-500">0:00</span>
+                          )}
                         </div>
                       </div>
                     </div>
                   </CardHeader>
                   <CardContent>
-                    {/* Avatar Display */}
-                    <div className="bg-gradient-to-br from-purple-100 to-blue-100 rounded-lg p-8 mb-6 min-h-[300px] flex items-center justify-center">
+                    {/* Enhanced Practice Display */}
+                    <div className="relative">
+                      {/* Animated Background */}
                       <motion.div
-                        key={currentStep}
-                        initial={{ scale: 0.8, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        transition={{ duration: 0.5 }}
-                        className="text-center"
-                      >
-                        <div className="text-8xl mb-4">{practice.icon}</div>
-                        <p className="text-xl font-semibold text-gray-800">
-                          Step {currentStep + 1} of {practice.tts_instructions.length}
-                        </p>
-                      </motion.div>
+                        className="absolute inset-0 bg-gradient-to-br from-purple-400/20 via-blue-400/20 to-cyan-400/20 rounded-2xl blur-xl"
+                        animate={{
+                          opacity: isPracticing ? [0.3, 0.6, 0.3] : 0.3,
+                          scale: isPracticing ? [1, 1.05, 1] : 1
+                        }}
+                        transition={{
+                          duration: 3,
+                          repeat: isPracticing ? Infinity : 0,
+                          ease: "easeInOut"
+                        }}
+                      />
+
+                      <div className="relative bg-gradient-to-br from-white/90 to-purple-50/90 backdrop-blur-sm rounded-2xl p-8 mb-6 min-h-[280px] shadow-lg border border-purple-200/50">
+                        <AnimatePresence mode="wait">
+                          <motion.div
+                            key={currentStep}
+                            initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                            animate={{ scale: 1, opacity: 1, y: 0 }}
+                            exit={{ scale: 0.9, opacity: 0, y: -20 }}
+                            transition={{ duration: 0.4, ease: "easeOut" }}
+                            className="text-center"
+                          >
+                            {/* Step Counter Badge */}
+                            <motion.div
+                              initial={{ scale: 0 }}
+                              animate={{ scale: 1 }}
+                              transition={{ delay: 0.2, type: "spring" }}
+                              className="inline-block mb-4"
+                            >
+                              <Badge className="text-lg px-4 py-2 bg-gradient-to-r from-purple-500 to-blue-500 text-white">
+                                Step {currentStep + 1} of {practice.tts_instructions.length}
+                              </Badge>
+                            </motion.div>
+
+                            {/* Large Icon */}
+                            <motion.div
+                              animate={{
+                                scale: isSpeaking ? [1, 1.1, 1] : 1,
+                                rotate: isSpeaking ? [0, 5, -5, 0] : 0
+                              }}
+                              transition={{
+                                duration: 2,
+                                repeat: isSpeaking ? Infinity : 0
+                              }}
+                              className="text-9xl mb-6 filter drop-shadow-lg"
+                            >
+                              {practice.icon}
+                            </motion.div>
+
+                            {/* Duration Display */}
+                            {practice.steps && practice.steps[currentStep]?.duration_text && (
+                              <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                transition={{ delay: 0.3 }}
+                                className="flex items-center justify-center gap-2 text-purple-600 mb-4"
+                              >
+                                <Clock className="w-5 h-5" />
+                                <span className="text-lg font-semibold">
+                                  {practice.steps[currentStep].duration_text}
+                                </span>
+                              </motion.div>
+                            )}
+
+                            {/* Current Instruction */}
+                            <motion.div
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              transition={{ delay: 0.4 }}
+                              className="bg-white/80 backdrop-blur-sm rounded-xl p-6 shadow-md border-2 border-purple-300/50"
+                            >
+                              <p className="text-xl text-gray-800 leading-relaxed font-medium">
+                                {practice.steps ? practice.steps[currentStep]?.instruction : practice.tts_instructions[currentStep].replace(/for \d+ \w+$/, '')}
+                              </p>
+                            </motion.div>
+                          </motion.div>
+                        </AnimatePresence>
+                      </div>
                     </div>
 
-                    {/* Current Instruction */}
-                    <div className="bg-white border-2 border-purple-200 rounded-lg p-6 mb-6">
-                      <p className="text-lg text-gray-800 leading-relaxed">
-                        {practice.tts_instructions[currentStep]}
-                      </p>
-                    </div>
+                    {/* Auto-advance indicator with countdown */}
+                    {isPracticing && (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.9 }}
+                        className="flex items-center justify-center gap-3 mb-6 bg-gradient-to-r from-purple-500/10 to-blue-500/10 rounded-xl p-4 border border-purple-300/30"
+                      >
+                        <motion.div
+                          animate={{ scale: [1, 1.2, 1] }}
+                          transition={{ duration: 1.5, repeat: Infinity }}
+                        >
+                          <Activity className="w-5 h-5 text-purple-600" />
+                        </motion.div>
+                        <div className="text-center">
+                          <p className="text-sm font-semibold text-purple-700">
+                            {isSpeaking ? '🔊 Listening to instruction...' : `⏳ Practicing step... ${stepCountdown}s remaining`}
+                          </p>
+                          <p className="text-xs text-purple-600 mt-1">
+                            {isSpeaking ? 'Get ready...' : 'Auto-advancing when complete'}
+                          </p>
+                        </div>
+                      </motion.div>
+                    )}
 
                     {/* Controls */}
                     <div className="flex gap-4">
@@ -565,13 +927,6 @@ export function PracticeDetailPage({
                               <Volume2 className="w-5 h-5" />
                             )}
                           </Button>
-                          <Button
-                            onClick={nextStep}
-                            variant="outline"
-                            size="lg"
-                          >
-                            Next
-                          </Button>
                         </>
                       )}
                     </div>
@@ -580,13 +935,13 @@ export function PracticeDetailPage({
                     <div className="mt-6">
                       <div className="flex justify-between text-sm text-gray-600 mb-2">
                         <span>Progress</span>
-                        <span>{Math.round((currentStep / practice.tts_instructions.length) * 100)}%</span>
+                        <span>{Math.round(((currentStep + 1) / practice.tts_instructions.length) * 100)}%</span>
                       </div>
                       <div className="w-full bg-gray-200 rounded-full h-2">
                         <motion.div
                           className="bg-purple-600 h-2 rounded-full"
                           initial={{ width: 0 }}
-                          animate={{ width: `${(currentStep / practice.tts_instructions.length) * 100}%` }}
+                          animate={{ width: `${((currentStep + 1) / practice.tts_instructions.length) * 100}%` }}
                           transition={{ duration: 0.5 }}
                         />
                       </div>
@@ -621,11 +976,10 @@ export function PracticeDetailPage({
                               aria-label={`Rate ${rating} stars`}
                             >
                               <Star
-                                className={`w-10 h-10 ${
-                                  rating <= satisfactionRating
+                                className={`w-10 h-10 ${rating <= satisfactionRating
                                     ? 'fill-yellow-400 text-yellow-400'
                                     : 'text-gray-300'
-                                }`}
+                                  }`}
                               />
                             </button>
                           ))}
