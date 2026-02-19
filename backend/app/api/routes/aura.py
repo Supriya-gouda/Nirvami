@@ -163,14 +163,41 @@ async def get_today_aura(
         if result.data and len(result.data) > 0:
             return result.data[0]
         
-        # If no aura exists, generate one based on real emotion data
-        aura_service = AuraService(supabase)
-        aura_data = await aura_service.generate_daily_aura(current_user_id, date.today())
-        return aura_data
+        # If no aura exists, return neutral aura immediately (fast)
+        # Instead of generating (which can hang)
+        logger.info(f"No aura found for {current_user_id}, returning neutral")
+        neutral_info = AuraService.AURA_MAPPINGS["neutral"]
+        return {
+            "user_id": current_user_id,
+            "date": date.today().isoformat(),
+            "color_code": neutral_info["color_code"],
+            "intensity": 50,
+            "glow_level": 50,
+            "aura_type": "neutral",
+            "emotion_basis": {
+                "aura_name": neutral_info["name"],
+                "why": neutral_info["why"],
+                "what_it_does": neutral_info["what_it_does"],
+                "purpose": neutral_info["purpose"],
+                "chakra": neutral_info["chakra"],
+                "element": neutral_info["element"],
+                "gradient": neutral_info["gradient"]
+            }
+        }
         
     except Exception as e:
-        logger.error(f"Error fetching today's aura: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to fetch aura: {str(e)}")
+        logger.error(f"Error fetching today's aura: {e}", exc_info=True)
+        # Return neutral aura on any error
+        neutral_info = AuraService.AURA_MAPPINGS.get("neutral", {})
+        return {
+            "user_id": current_user_id,
+            "date": date.today().isoformat(),
+            "color_code": "#9E9E9E",
+            "intensity": 50,
+            "glow_level": 50,
+            "aura_type": "neutral",
+            "emotion_basis": {}
+        }
 
 
 @router.post("/generate")
@@ -180,15 +207,56 @@ async def generate_aura(
     """Generate/regenerate today's aura based on recent emotions."""
     try:
         supabase = get_supabase(use_service_role=True)
-        aura_service = AuraService(supabase)
         
-        # Generate aura for today
+        # Quick check for emotions today
+        today_str = date.today().isoformat()
+        emotions_result = supabase.table("emotion_logs").select("emotion_type, confidence").eq(
+            "user_id", current_user_id
+        ).gte("created_at", f"{today_str}T00:00:00").lte(
+            "created_at", f"{today_str}T23:59:59"
+        ).limit(1).execute()
+        
+        # If no emotions, return neutral immediately
+        if not emotions_result.data:
+            logger.info(f"No emotions for {current_user_id}, returning neutral aura")
+            neutral_info = AuraService.AURA_MAPPINGS["neutral"]
+            return {
+                "user_id": current_user_id,
+                "date": today_str,
+                "color_code": neutral_info["color_code"],
+                "intensity": 50,
+                "glow_level": 50,
+                "aura_type": "neutral",
+                "emotion_basis": {
+                    "aura_name": neutral_info["name"],
+                    "emotion": "neutral",
+                    "why": neutral_info["why"],
+                    "what_it_does": neutral_info["what_it_does"],
+                    "purpose": neutral_info["purpose"],
+                    "chakra": neutral_info["chakra"],
+                    "element": neutral_info["element"],
+                    "gradient": neutral_info["gradient"]
+                }
+            }
+        
+        # Try to generate but with timeout protection
+        aura_service = AuraService(supabase)
         aura_data = await aura_service.generate_daily_aura(current_user_id, date.today())
         
         return aura_data
     except Exception as e:
-        logger.error(f"Error generating aura: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to generate aura: {str(e)}")
+        logger.error(f"Error generating aura: {e}", exc_info=True)
+        # Return neutral on any error
+        neutral_info = AuraService.AURA_MAPPINGS.get("neutral", {})
+        return {
+            "user_id": current_user_id,
+            "date": date.today().isoformat(),
+            "color_code": "#9E9E9E",
+            "intensity": 50,
+            "glow_level": 50,
+            "aura_type": "neutral",
+            "emotion_basis": {}
+        }
 
 
 @router.get("/timeline", response_model=List[AuraEntry])

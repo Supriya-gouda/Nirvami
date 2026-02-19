@@ -70,31 +70,45 @@ export function YogaPractice({ recommendation, onComplete, onClose }: YogaPracti
     const parsed: YogaStep[] = [];
 
     // Try to parse structured steps from content
-    // Split by numbered patterns like "1.", "2.", "Step 1:", etc.
-    const stepPattern = /(?:^|\n)\s*(?:Step\s*)?(\d+)[:.)]\s*([^\n]+(?:\n(?!\s*(?:Step\s*)?\d+[:.)])[^\n]+)*)/gi;
-    const stepMatches = content.matchAll(stepPattern);
-    const matches = Array.from(stepMatches);
-    
+    // Handle both inline steps (1. First. 2. Second.) and multi-line steps
     let mainSteps: YogaStep[] = [];
     
-    if (matches && matches.length > 0) {
-      // Parse each numbered step individually - SPLIT THEM PROPERLY
-      matches.forEach((match, idx) => {
+    // First, try to split by numbered patterns like "1.", "2.", "Step 1:", etc.
+    // This regex handles both inline and multi-line cases
+    const stepPattern = /(?:^|(?:\.\s*))(?:Step\s*)?(\d+)[:.)]\s*([^.]+(?:\.[^0-9][^.]*)*?)(?=(?:\s*\d+[:.)]|\s*Step\s*\d+|$))/gi;
+    const stepMatches = Array.from(content.matchAll(stepPattern));
+    
+    if (stepMatches && stepMatches.length > 0) {
+      // Parse each numbered step individually
+      stepMatches.forEach((match, idx) => {
         let instruction = match[2].trim();
         
-        // Extract duration from text like "hold for 3 minutes"
-        const durationMatch = instruction.match(/(\d+)\s*(?:to\s*\d+)?\s*(min(?:ute)?s?|sec(?:ond)?s?)/i);
+        // Clean up instruction - remove leading/trailing periods, extra spaces
+        instruction = instruction.replace(/^\.\s*/, '').replace(/\.\s*$/, '').trim();
+        
+        // Skip if instruction is too short (likely parsing error)
+        if (instruction.length < 10) return;
+        
+        // Extract duration from text like "hold for 3 minutes", "30 seconds", "5-10 min"
+        const durationMatch = instruction.match(/(?:hold|for|take)\s*(?:for)?\s*(\d+)\s*(?:to|-|–)?\s*(\d+)?\s*(min(?:ute)?s?|sec(?:ond)?s?)/i);
         let durationSeconds = 45; // default
         
         if (durationMatch) {
-          const value = parseInt(durationMatch[1]);
-          const unit = durationMatch[2].toLowerCase();
-          durationSeconds = unit.startsWith('min') ? value * 60 : value;
+          const value1 = parseInt(durationMatch[1]);
+          const value2 = durationMatch[2] ? parseInt(durationMatch[2]) : value1;
+          const avgValue = Math.round((value1 + value2) / 2);
+          const unit = durationMatch[3].toLowerCase();
+          durationSeconds = unit.startsWith('min') ? avgValue * 60 : avgValue;
         } else {
           // Assign durations based on position
           if (idx === 0) durationSeconds = 30; // First step
-          else if (idx === matches.length - 1) durationSeconds = 30; // Last step
+          else if (idx === stepMatches.length - 1) durationSeconds = 30; // Last step
           else durationSeconds = 45; // Middle steps
+        }
+        
+        // Add period if not present
+        if (!instruction.endsWith('.') && !instruction.endsWith('!') && !instruction.endsWith('?')) {
+          instruction += '.';
         }
         
         mainSteps.push({ instruction, duration_seconds: durationSeconds });

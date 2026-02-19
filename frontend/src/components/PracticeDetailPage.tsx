@@ -136,11 +136,28 @@ export function PracticeDetailPage({
       // Fallback: Create dynamic practice from recommendation
       const parsedSteps = parseStepsFromContent(recommendation.content);
 
+      // Check if first step is already a preparation step
+      const firstStepLower = parsedSteps[0]?.instruction.toLowerCase() || '';
+      const isPrepStep = firstStepLower.includes('comfortable') || 
+                        firstStepLower.includes('prepare') || 
+                        firstStepLower.includes('sit') ||
+                        firstStepLower.includes('position') ||
+                        firstStepLower.includes('find a quiet');
+
+      // Add preparation step at the beginning ONLY if not already present
+      if (!isPrepStep) {
+        parsedSteps.unshift({
+          instruction: 'Get comfortable and prepare by sitting in a peaceful place.',
+          duration_seconds: 15,
+          duration_text: 'for 15 seconds'
+        });
+      }
+
       // Add relaxation step at the end
       parsedSteps.push({
-        instruction: 'Now Release and Relax',
-        duration_seconds: 10,
-        duration_text: 'for 10 seconds'
+        instruction: 'Release slowly and relax. Take a moment to notice how you feel.',
+        duration_seconds: 15,
+        duration_text: 'for 15 seconds'
       });
 
       const dynamicPractice: PracticeContent = {
@@ -191,20 +208,25 @@ export function PracticeDetailPage({
   const parseStepsFromContent = (content: string): PracticeStep[] => {
     const steps: PracticeStep[] = [];
 
-    // Try to parse numbered steps (e.g., "1. instruction", "Step 1:", etc.)
-    const stepMatches = content.match(/(?:Step\s*\d+[:.)]?|\d+[:.)]?)\s*([^\n]+(?:\n(?!\d+[:.)]|Step\s*\d+)[^\n]+)*)/gi);
+    // Try to parse numbered steps - handle both inline (1. First. 2. Second.) and multi-line
+    const stepPattern = /(?:^|(?:\.\s*))(?:Step\s*)?(\d+)[:.)]\s*([^.]+(?:\.[^0-9][^.]*)*?)(?=(?:\s*\d+[:.)]|\s*Step\s*\d+|$))/gi;
+    const stepMatches = Array.from(content.matchAll(stepPattern));
 
     if (stepMatches && stepMatches.length > 0) {
       stepMatches.forEach((match, idx) => {
-        // Remove step numbering
-        let instruction = match.replace(/^(?:Step\s*\d+[:.)]?|\d+[:.)]?)\s*/i, '').trim();
+        // Remove step numbering and clean up
+        let instruction = match[2].trim();
+        instruction = instruction.replace(/^\.\s*/, '').replace(/\.\s*$/, '').trim();
+        
+        // Skip if too short (parsing error)
+        if (instruction.length < 10) return;
 
         // Extract duration if mentioned (including ranges like "5 to 15 min", "5-15 min")
         let durationText = '';
         let durationSeconds = 0;
 
         // First try to match ranges: "5 to 15 min", "5-15 minutes", "2 to 3 seconds"
-        const rangeMatch = instruction.match(/(?:for|hold(?:\s+for)?)\s*(\d+)\s*(?:to|-|–)\s*(\d+)\s*(min(?:ute)?s?|sec(?:ond)?s?)/i);
+        const rangeMatch = instruction.match(/(?:for|hold(?:\s+for)?|take)\s*(\d+)\s*(?:to|-|–)\s*(\d+)\s*(min(?:ute)?s?|sec(?:ond)?s?)/i);
         if (rangeMatch) {
           const minValue = parseInt(rangeMatch[1]);
           const maxValue = parseInt(rangeMatch[2]);
@@ -218,8 +240,8 @@ export function PracticeDetailPage({
           const unitText = unit.startsWith('min') ? 'minute' : 'second';
           durationText = `for ${minValue} to ${maxValue} ${unitText}${maxValue > 1 ? 's' : ''}`;
         } else {
-          // Try single duration: "for 5 minutes", "30 seconds"
-          const durationMatch = instruction.match(/(?:for|hold(?:\s+for)?)\s*(\d+)\s*(min(?:ute)?s?|sec(?:ond)?s?)/i);
+          // Try single duration: "for 5 minutes", "30 seconds", "hold 10 sec"
+          const durationMatch = instruction.match(/(?:for|hold(?:\s+for)?|take)\s*(?:for)?\s*(\d+)\s*(min(?:ute)?s?|sec(?:ond)?s?)/i);
           if (durationMatch) {
             const value = parseInt(durationMatch[1]);
             const unit = durationMatch[2].toLowerCase();
@@ -227,13 +249,18 @@ export function PracticeDetailPage({
             durationText = `for ${value} ${unit.startsWith('min') ? 'minute' : 'second'}${value > 1 ? 's' : ''}`;
           } else {
             // Default durations based on step position
-            durationSeconds = idx === 0 ? 10 : 30; // First step shorter
+            durationSeconds = idx === 0 ? 30 : 45; // First step shorter, others 45s default
             durationText = `for ${durationSeconds} seconds`;
           }
         }
+        
+        // Add period if not present
+        if (!instruction.endsWith('.') && !instruction.endsWith('!') && !instruction.endsWith('?')) {
+          instruction += '.';
+        }
 
         steps.push({
-          instruction: instruction.trim(),
+          instruction: instruction,
           duration_seconds: durationSeconds,
           duration_text: durationText
         });
@@ -242,9 +269,9 @@ export function PracticeDetailPage({
       // Fallback: split by periods
       const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 20);
       sentences.forEach((sentence, idx) => {
-        const durationSeconds = idx === 0 ? 10 : 30;
+        const durationSeconds = idx === 0 ? 30 : 45;
         steps.push({
-          instruction: sentence.trim(),
+          instruction: sentence.trim() + '.',
           duration_seconds: durationSeconds,
           duration_text: `for ${durationSeconds} seconds`
         });

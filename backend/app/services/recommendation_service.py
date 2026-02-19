@@ -8,6 +8,7 @@ import hashlib
 from datetime import date, datetime
 from typing import List, Dict, Any, Optional, Union
 from uuid import UUID
+import google.generativeai as genai
 
 from app.models.schemas import (
     RecommendationCreate, 
@@ -19,6 +20,7 @@ from app.models.schemas import (
 from app.utils.database import get_supabase
 from app.services.gemini_chatbot import GeminiChatbot
 from app.ml.model_manager import ModelManager
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -27,9 +29,18 @@ class RecommendationService:
     """Service for extracting, storing, and retrieving recommendations"""
     
     def __init__(self):
-        """Initialize with Gemini chatbot for parsing"""
+        """Initialize with Gemini chatbot for parsing and separate extraction model"""
         self.gemini = GeminiChatbot()
         self.model_manager = ModelManager()
+        
+        # Create a dedicated extraction model without conversational system instructions
+        try:
+            genai.configure(api_key=settings.GEMINI_API_KEY)
+            self.extraction_model = genai.GenerativeModel('gemini-2.0-flash-exp')
+            logger.info("[REC_SERVICE] ✅ Dedicated extraction model initialized")
+        except Exception as e:
+            logger.warning(f"[REC_SERVICE] Could not initialize extraction model: {e}")
+            self.extraction_model = None
     
     def _safe_parse_timestamp(self, timestamp_str: str) -> datetime:
         """
@@ -86,7 +97,7 @@ class RecommendationService:
             logger.info(f"[REC_EXTRACT] User ID: {user_id}")
             logger.info(f"[REC_EXTRACT] Message length: {len(message_text)}")
             logger.info(f"[REC_EXTRACT] Message preview: {message_text[:200]}...")
-            logger.info(f"[REC_EXTRACT] Gemini available: {self.gemini is not None and self.gemini.model is not None}")
+            logger.info(f"[REC_EXTRACT] Extraction model available: {self.extraction_model is not None}")
             
             # Calculate the date based on timestamp and timezone
             user_date = self._get_user_date(timestamp, timezone_offset)
@@ -371,59 +382,67 @@ class RecommendationService:
         Returns:
             List of recommendation dictionaries with category, title, content
         """
-        if not self.gemini or not self.gemini.model:
-            logger.warning("[REC_EXTRACT] Gemini not available for recommendation parsing")
+        if not self.extraction_model:
+            logger.warning("[REC_EXTRACT] Extraction model not available")
+            return []
+        
+        # OPTIMIZATION: Quick preliminary check - skip Gemini call if message is clearly conversational
+        text_lower = message_text.lower()
+        has_recommendation_keywords = any(keyword in text_lower for keyword in [
+            'pose', 'asana', 'practice', 'breathing', 'pranayama', 
+            'meditation', 'technique', 'exercise', 'steps:', '1.', '2.', 
+            'try this', 'i recommend', 'suggestion', 'dosha'
+        ])
+        
+        if not has_recommendation_keywords or len(message_text) < 50:
+            logger.info(f"[REC_EXTRACT] Message doesn't contain recommendation keywords, skipping extraction")
             return []
         
         try:
             logger.info(f"[REC_EXTRACT] Using Gemini to parse message length: {len(message_text)}")
             
-            # Create extraction prompt
-            extraction_prompt = f"""You are an expert AI recommendation parser. Analyze the following wellness assistant response and extract ONLY specific, actionable recommendations.
+            # Create extraction prompt - FORCE JSON-only output with STRICT step validation
+            extraction_prompt = f"""You are a JSON extraction bot. Output ONLY valid JSON. NO other text.
 
-CRITICAL EXTRACTION RULES:
-1. Extract ONLY direct recommendations the user can practice (yoga poses, breathing techniques, meditation practices, lifestyle changes)
-2. Each recommendation must be a specific technique, practice, or action
-3. If the message is asking questions or having a conversation without giving specific practices, return []
-4. The title should be the NAME of the technique/practice (e.g., "Child's Pose", "Box Breathing", "Morning Meditation")
-5. The content should explain HOW to do it with step-by-step instructions
+TASK: Extract yoga/breathing/meditation practice instructions from the text below.
 
-CATEGORIES (choose the most specific):
-- "yoga": Specific yoga poses, asanas (e.g., Balasana, Shavasana, Sun Salutation)
-- "breathing": Pranayama techniques, breathing exercises (e.g., Sama Vritti, Box Breathing, 4-7-8 Breathing)
-- "meditation": Meditation techniques, mindfulness practices (e.g., Body Scan, Loving-kindness Meditation)
-- "ayurveda": Ayurvedic remedies, herbs, dosha practices
-- "lifestyle": Daily routines, habits, environment changes
-- "sleep": Sleep hygiene practices, bedtime routines
-- "diet": Specific foods, eating habits, nutrition advice
+CRITICAL RULES FOR STEPS:
+✅ VALID STEPS = Physical actions/instructions that tell you WHAT TO DO
+   Examples: "Stand with feet apart", "Bend forward", "Inhale for 4 counts", "Hold the pose"
+   
+❌ INVALID = Explanations, benefits, context, descriptions, feelings
+   Examples: "I understand", "This is helpful", "When you feel stressed", "This pose helps with..."
 
-TITLE FORMAT EXAMPLES:
-✅ Good: "Child's Pose (Balasana)", "Box Breathing", "Morning Sun Salutation"
-❌ Bad: "Practice yoga pose", "Try breathing", "Daily Child's Pose (Balasana)"
+STEP FORMAT REQUIREMENTS:
+1. Each step MUST start with an ACTION VERB (Stand, Bend, Sit, Inhale, Hold, Place, Extend, etc.)
+2. Steps must be NUMBERED: "1. Action. 2. Action. 3. Action."
+3. Extract 2-5 CORE exercise steps only
+4. SKIP preparation instructions (sitting comfortably, finding a quiet place)
+5. SKIP relaxation instructions (release, relax, return to normal)
+6. SKIP explanations about benefits or why to do it
 
-Return ONLY valid JSON array (empty [] if no specific recommendations found):
+OUTPUT FORMAT (MANDATORY):
+- If valid practice found: [{{"category":"yoga","title":"Pose Name","content":"1. Stand with feet wide. 2. Bend at waist. 3. Hold for 30 seconds."}}]
+- If NO valid practice: []
+- NO explanations. NO conversational text. ONLY the JSON array.
 
-[
-  {{
-    "category": "yoga|breathing|meditation|ayurveda|lifestyle|sleep|diet",
-    "title": "Specific technique/practice name",
-    "content": "Clear step-by-step instructions on how to practice this recommendation"
-  }}
-]
+Categories: yoga, breathing, meditation, ayurveda, lifestyle, sleep, diet
 
-Assistant response to analyze:
-{message_text}"""
+TEXT TO PARSE:
+{message_text[:1500]}
+
+JSON OUTPUT:"""
             
-            # Generate response from Gemini
-            logger.info(f"[REC_EXTRACT] Sending extraction prompt to Gemini...")
-            response = self.gemini.model.generate_content(extraction_prompt)
+            # Generate response from dedicated extraction model (no conversational restrictions)
+            logger.info(f"[REC_EXTRACT] Sending extraction prompt to dedicated Gemini model...")
+            response = self.extraction_model.generate_content(extraction_prompt)
             
             if not response or not response.text:
-                logger.warning("[REC_EXTRACT] No response from Gemini for recommendation extraction")
+                logger.warning("[REC_EXTRACT] No response from extraction model")
                 return []
             
-            logger.info(f"[REC_EXTRACT] Gemini response length: {len(response.text)}")
-            logger.info(f"[REC_EXTRACT] Gemini raw response: {response.text[:500]}...")
+            logger.info(f"[REC_EXTRACT] Extraction model response length: {len(response.text)}")
+            logger.info(f"[REC_EXTRACT] Raw extraction response: {response.text[:500]}...")
             
             # Clean the response - remove code blocks if present
             response_text = response.text.strip()
@@ -443,24 +462,30 @@ Assistant response to analyze:
                 extracted_recs = json.loads(response_text)
                 
                 if not isinstance(extracted_recs, list):
-                    logger.warning(f"[REC_EXTRACT] Gemini response is not a list, got: {type(extracted_recs)}")
+                    logger.warning(f"[REC_EXTRACT] Response is not a list, got: {type(extracted_recs)}")
                     return []
                 
                 logger.info(f"[REC_EXTRACT] Parsed {len(extracted_recs)} raw recommendations")
                 
-                # Validate each recommendation
+                # Validate each recommendation and its steps
                 valid_recs = []
                 for i, rec in enumerate(extracted_recs):
                     if (isinstance(rec, dict) and 
                         "category" in rec and 
                         "title" in rec and 
                         "content" in rec):
-                        valid_recs.append(rec)
-                        logger.info(f"[REC_EXTRACT] Valid rec {i+1}: {rec['category']} - {rec['title'][:50]}...")
+                        
+                        # Validate that content contains actual action steps
+                        if self._validate_steps_content(rec["content"]):
+                            valid_recs.append(rec)
+                            logger.info(f"[REC_EXTRACT] ✅ Valid rec {i+1}: {rec['category']} - {rec['title']}")
+                            logger.info(f"[REC_EXTRACT] Steps preview: {rec['content'][:100]}...")
+                        else:
+                            logger.warning(f"[REC_EXTRACT] ❌ Rejected rec {i+1} - invalid steps: {rec['content'][:100]}...")
                     else:
                         logger.warning(f"[REC_EXTRACT] Invalid rec {i+1}: missing required fields")
                 
-                logger.info(f"[REC_EXTRACT] Extracted {len(valid_recs)} valid recommendations using Gemini")
+                logger.info(f"[REC_EXTRACT] Extracted {len(valid_recs)} valid recommendations with proper steps")
                 return valid_recs
                 
             except json.JSONDecodeError as e:
@@ -474,6 +499,70 @@ Assistant response to analyze:
             # Fallback: Try basic keyword extraction
             logger.info("[REC_EXTRACT] Attempting fallback keyword extraction...")
             return self._fallback_extract_recommendations(message_text)
+    
+    def _validate_steps_content(self, content: str) -> bool:
+        """
+        Validate that content contains actual action steps, not explanations
+        
+        Args:
+            content: The steps content to validate
+            
+        Returns:
+            True if content contains valid action steps, False otherwise
+        """
+        # List of action verbs that indicate valid exercise steps
+        action_verbs = [
+            'stand', 'sit', 'lie', 'kneel', 'bend', 'stretch', 'extend', 'raise',
+            'lower', 'lift', 'place', 'hold', 'press', 'push', 'pull', 'rotate',
+            'turn', 'twist', 'inhale', 'exhale', 'breathe', 'focus', 'relax',
+            'release', 'engage', 'tighten', 'move', 'shift', 'lean', 'reach',
+            'spread', 'bring', 'draw', 'rest', 'position', 'align', 'straighten'
+        ]
+        
+        # Invalid phrases that indicate conversational/explanatory text
+        invalid_phrases = [
+            'i understand', 'i appreciate', 'you feel', 'you are feeling',
+            'when you', 'this is', 'this helps', 'this will', 'benefits include',
+            'great for', 'perfect for', 'helps with', 'can help', 'is designed',
+            'allows you', 'is a', 'let me', 'i recommend', 'i suggest'
+        ]
+        
+        content_lower = content.lower()
+        
+        # Check for invalid phrases first (immediate disqualification)
+        for phrase in invalid_phrases:
+            if phrase in content_lower:
+                logger.info(f"[VALIDATE] ❌ Contains invalid phrase: '{phrase}'")
+                return False
+        
+        # Check if content has numbered steps (1., 2., etc.)
+        has_numbering = bool(re.search(r'\d+\.', content))
+        if not has_numbering:
+            logger.info(f"[VALIDATE] ❌ No numbered steps found")
+            return False
+        
+        # Extract sentences and check if they contain action verbs
+        sentences = re.split(r'\d+\.\s*', content)  # Split by numbered points
+        sentences = [s.strip() for s in sentences if s.strip()]
+        
+        if len(sentences) < 2:
+            logger.info(f"[VALIDATE] ❌ Too few steps: {len(sentences)}")
+            return False
+        
+        # At least 60% of steps should start with action verbs
+        action_step_count = 0
+        for sentence in sentences[:5]:  # Check first 5 steps
+            first_words = sentence.lower().split()[:3]  # Check first 3 words
+            if any(verb in ' '.join(first_words) for verb in action_verbs):
+                action_step_count += 1
+        
+        action_ratio = action_step_count / len(sentences[:5])
+        if action_ratio < 0.6:
+            logger.info(f"[VALIDATE] ❌ Too few action steps: {action_step_count}/{len(sentences[:5])} = {action_ratio:.1%}")
+            return False
+        
+        logger.info(f"[VALIDATE] ✅ Valid steps: {action_step_count}/{len(sentences[:5])} contain actions")
+        return True
     
     def _fallback_extract_recommendations(self, message_text: str) -> List[Dict[str, str]]:
         """

@@ -1,5 +1,5 @@
 """Updated chat routes with full emotion detection and database integration."""
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks
 from app.models.schemas import SendMessageRequest, Message, ChatSession, ChatResponse, MessageRole
 from app.utils.auth import get_current_user_id
 from app.utils.database import get_supabase
@@ -122,6 +122,7 @@ async def db_test(current_user_id: str = Depends(get_current_user_id)):
 async def send_message(
     request: Request,
     message_req: SendMessageRequest,
+    background_tasks: BackgroundTasks,
     current_user_id: str = Depends(get_current_user_id)
 ):
     """Send a message and get AI response from Gemini chatbot with full emotion detection."""
@@ -243,14 +244,10 @@ async def send_message(
             msg_result = supabase.table("messages").insert(user_message_data).execute()
             logger.info(f"[CHAT] ✅ User message saved: {user_message_id}")
             
-            # Log emotion and update aura asynchronously (don't block response)
-            # These are non-critical operations that can run in background
-            import asyncio
-            
-            async def background_tasks():
-                """Non-blocking background tasks"""
+            # Log emotion and update aura in background (non-blocking)
+            async def log_emotion_background():
+                """Background task: Log emotion from chat"""
                 try:
-                    # Log emotion
                     emotion_log = emotion_service.create_emotion_log(
                         user_id=current_user_id,
                         emotion_type=emotion_data['emotion_type'],
@@ -263,18 +260,9 @@ async def send_message(
                     logger.info(f"[CHAT] ✅ Emotion logged from chat")
                 except Exception as emotion_err:
                     logger.warning(f"[CHAT] Failed to log emotion (non-critical): {emotion_err}")
-                
-                try:
-                    # Update Aura
-                    from app.services.aura_service import AuraService
-                    aura_service = AuraService(supabase)
-                    await aura_service.generate_daily_aura(current_user_id, datetime.utcnow().date())
-                    logger.info(f"[CHAT] ✅ Aura updated")
-                except Exception as aura_err:
-                    logger.warning(f"[CHAT] Failed to update aura (non-critical): {aura_err}")
             
-            # Start background tasks without waiting
-            asyncio.create_task(background_tasks())
+            # Add emotion logging to background tasks
+            background_tasks.add_task(log_emotion_background)
             
         except Exception as db_msg_err:
             logger.error(f"Failed to save user message to DB: {db_msg_err}", exc_info=True)
@@ -369,11 +357,9 @@ async def send_message(
             ai_result = supabase.table("messages").insert(ai_message_data).execute()
             logger.info(f"[CHAT] ✅ AI response saved: {ai_message_id}")
             
-            # Extract recommendations asynchronously (don't block response)
-            import asyncio
-            
+            # Extract recommendations in background (non-blocking)
             async def extract_recommendations():
-                """Non-blocking recommendation extraction"""
+                """Background task: Extract recommendations from AI response"""
                 try:
                     from app.services.recommendation_service import recommendation_service
                     logger.info(f"[CHAT] 🔍 Starting recommendation extraction from AI response...")
@@ -393,8 +379,8 @@ async def send_message(
                 except Exception as rec_err:
                     logger.error(f"[CHAT] ❌ Failed to extract recommendations: {rec_err}", exc_info=True)
             
-            # Start recommendation extraction without waiting
-            asyncio.create_task(extract_recommendations())
+            # Add recommendation extraction to background tasks
+            background_tasks.add_task(extract_recommendations)
                 
         except Exception as db_ai_err:
             logger.error(f"Failed to save AI response to DB: {db_ai_err}", exc_info=True)

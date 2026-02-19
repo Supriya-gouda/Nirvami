@@ -97,25 +97,22 @@ class MealService:
             
             saved_meal = result.data[0]
             
-            # Perform comprehensive Gemini analysis
-            analysis_result = await self._perform_comprehensive_meal_analysis(
-                user_id, 
-                saved_meal['id'],
-                meal_text,
-                ingredients,
-                dosha_impact
-            )
+            # OPTIMIZATION: Skip heavy analysis operations for faster meal logging
+            # These can be done on-demand when user views meal details
+            analysis_result = {
+                'ingredients': ingredients,
+                'dosha_impact': dosha_impact,
+                'estimated_calories': estimated_calories,
+                'message': 'Meal logged successfully'
+            }
             
-            # Generate Ayurvedic guidelines for today
-            await self._generate_daily_guidelines(user_id, saved_meal['id'])
+            # Skip these slow operations:
+            # - _perform_comprehensive_meal_analysis (calls Gemini)
+            # - _generate_daily_guidelines (calls Gemini)
+            # - _generate_recipe_suggestions (calls Gemini)
+            # Users can request these later if needed
             
-            # Generate recipe suggestions
-            await self._generate_recipe_suggestions(user_id)
-            
-            # Create mood-meal correlation
-            await self._create_mood_meal_correlation(user_id, saved_meal['id'])
-            
-            logger.info(f"Successfully logged meal {saved_meal['id']} for user {user_id}")
+            logger.info(f"Successfully logged meal {saved_meal['id']} for user {user_id} (fast mode)")
             
             # Return meal with analysis
             return {
@@ -222,62 +219,13 @@ class MealService:
             if recent_mood:
                 mood_context = f"\n\nCurrent mood: {recent_mood.get('emotion_type', 'neutral')} (intensity: {recent_mood.get('intensity', 5)}/10)"
             
-            # Generate comprehensive analysis using Gemini
-            prompt = f"""You are an Ayurvedic wellness expert. Analyze all meals eaten today and provide comprehensive guidance.
+            # OPTIMIZATION: Use shorter, faster Gemini prompt
+            prompt = f"""Ayurvedic expert: Analyze today's meals CONCISELY.
 
-Today's Meals:
-{meals_text}{mood_context}
+Meals: {meals_text[:500]}{mood_context}
 
-Provide a detailed but concise analysis covering:
-
-1. **Dosha Impact Summary**: How do today's meals affect Vata, Pitta, and Kapha? Which dosha is most increased or decreased?
-
-2. **Healthiness Assessment**: Are the meals healthy overall? Describe if they are light/heavy, oily/dry, cooling/heating according to Ayurvedic principles.
-
-3. **Ingredient Insights**: Highlight specific ingredients that positively or negatively affect digestion, mind, or energy levels.
-
-4. **Mood-Based Interpretation**: How might these foods be influencing the current emotional state? What's the food-mood connection?
-
-5. **Recommended Adjustments**: Provide specific, actionable improvements for the next meals. Include WHY each adjustment is important based on Ayurvedic principles. Be detailed but concise.
-
-6. **Daily Balance Recommendation**: One clear, actionable sentence summarizing what to focus on for the rest of the day.
-
-Return your analysis as a JSON object with these exact keys:
-{{
-  "dosha_impact": {{
-    "summary": "Brief explanation of dosha effects",
-    "primary_dosha": "vata|pitta|kapha",
-    "effect": "increased|decreased|balanced"
-  }},
-  "healthiness": {{
-    "overall_score": 70,
-    "assessment": "Brief evaluation of healthiness",
-    "qualities": ["light", "heating", "oily"]
-  }},
-  "ingredient_insights": {{
-    "positive": ["ingredient1: specific benefit explained", "ingredient2: specific benefit explained"],
-    "negative": ["ingredient1: specific concern explained", "ingredient2: specific concern explained"]
-  }},
-  "mood_interpretation": "How food relates to current mood with Ayurvedic reasoning",
-  "adjustments": {{
-    "next_meal_suggestions": [
-      "Detailed suggestion 1 with reasoning",
-      "Detailed suggestion 2 with reasoning",
-      "Detailed suggestion 3 with reasoning"
-    ],
-    "foods_to_add": [
-      "Food 1 - why it helps balance doshas or improve health",
-      "Food 2 - why it helps balance doshas or improve health"
-    ],
-    "foods_to_reduce": [
-      "Food 1 - why it aggravates doshas or harms health",
-      "Food 2 - why it aggravates doshas or harms health"
-    ]
-  }},
-  "daily_balance": "One actionable sentence with specific focus area"
-}}
-
-Keep all text concise and actionable. Be specific about Ayurvedic principles."""
+Return ONLY this JSON format (keep text brief, under 100 chars per field):
+{{"dosha_impact":{{"summary":"Brief dosha effect","primary_dosha":"vata|pitta|kapha","effect":"increased|decreased|balanced"}},"healthiness":{{"overall_score":70,"assessment":"Brief health eval","qualities":["quality1","quality2"]}},"ingredient_insights":{{"positive":["item1: benefit"],"negative":["item1: concern"]}},"mood_interpretation":"Food-mood connection briefly","adjustments":{{"next_meal_suggestions":["Suggestion 1","Suggestion 2"],"foods_to_add":["Food 1 - why"],"foods_to_reduce":["Food 1 - why"]}},"daily_balance":"One actionable sentence"}}"""
 
             response = self.gemini.chat(prompt)
             

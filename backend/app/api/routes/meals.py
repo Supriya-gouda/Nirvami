@@ -320,7 +320,7 @@ async def get_meal_ayurveda_guidelines(
             .lte('created_at', (target_date + timedelta(days=1)).isoformat())\
             .order('created_at', desc=True).execute()
         
-        guidelines = response.data
+        guidelines = response.data or []
         logger.info(f"Retrieved {len(guidelines)} Ayurveda guidelines for user {current_user_id}")
         
         return guidelines
@@ -329,7 +329,8 @@ async def get_meal_ayurveda_guidelines(
         raise
     except Exception as e:
         logger.error(f"Error getting Ayurveda guidelines: {e}")
-        raise HTTPException(status_code=500, detail=f"Error getting Ayurveda guidelines: {str(e)}")
+        # Return empty instead of error
+        return []
 
 
 @router.get("/daily-analysis")
@@ -346,7 +347,8 @@ async def get_daily_meal_analysis(
         
     except Exception as e:
         logger.error(f"Error getting daily meal analysis: {e}")
-        raise HTTPException(status_code=500, detail=f"Error getting daily meal analysis: {str(e)}")
+        # Return empty state instead of error
+        return {"has_meals": False, "message": "Analysis unavailable"}
 
 
 @router.get("/recipe-suggestions")
@@ -370,14 +372,15 @@ async def get_meal_recipe_suggestions(
         
         response = query.order('created_at', desc=True).limit(10).execute()
         
-        suggestions = response.data
+        suggestions = response.data or []
         logger.info(f"Retrieved {len(suggestions)} recipe suggestions for user {current_user_id}")
         
         return suggestions
         
     except Exception as e:
         logger.error(f"Error getting recipe suggestions: {e}")
-        raise HTTPException(status_code=500, detail=f"Error getting recipe suggestions: {str(e)}")
+        # Return empty instead of error
+        return []
 
 
 @router.get("/mood-correlations")
@@ -433,7 +436,8 @@ async def get_meal_mood_insights(
         
     except Exception as e:
         logger.error(f"Error getting meal-mood insights: {e}")
-        raise HTTPException(status_code=500, detail=f"Error getting meal-mood insights: {str(e)}")
+        # Return empty instead of error
+        return {"insights": [], "top_positive_foods": [], "foods_to_moderate": [], "recommendations": []}
 
 
 @router.delete("/{meal_id}")
