@@ -718,7 +718,6 @@ This is proprietary software. Unauthorized copying, modification, distribution, 
 
 <div align="center">
 
-**Built with ❤️ for Mental Wellness**
 
 *Empowering individuals through AI-driven holistic health solutions*
 
